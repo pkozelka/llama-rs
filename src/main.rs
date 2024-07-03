@@ -1,163 +1,105 @@
-// ----------------------------------------------------------------------------
-// Transformer model
+use clap::Parser;
+use std::path::PathBuf;
+use std::str::FromStr;
+use crate::run::{Sampler, Tokenizer, Transformer};
 
-struct Config {
-    /// transformer dimension
-    dim: i32,
-    /// for ffn layers
-    hidden_dim: i32,
-    /// number of layers
-    n_layers: i32,
-    /// number of query heads
-    n_heads: i32,
-    /// number of key/value heads (can be < query heads because of multiquery)
-    n_kv_heads: i32,
-    /// vocabulary size, usually 256 (byte-level)
-    vocab_size: i32,
-    /// max sequence length
-    seq_len: i32,
-}
+mod run;
 
-struct TransformerWeights {
-    /// token embedding table
-    /// (vocab_size, dim)
-    token_embedding_table: Vec<f32>,
-    /// weights for rmsnorms
-    /// (layer, dim) rmsnorm weights
-    rms_att_weight: Vec<f32>,
-    /// (layer, dim)
-    rms_ffn_weight: Vec<f32>,
-    /// (layer, dim, n_heads * head_size)
-    wq: Vec<f32>,
-    /// (layer, dim, n_kv_heads * head_size)
-    wk: Vec<f32>,
-    /// (layer, dim, n_kv_heads * head_size)
-    wv: Vec<f32>,
-    /// (layer, n_heads * head_size, dim)
-    wo: Vec<f32>,
-    /// weights for ffn
-    /// (layer, hidden_dim, dim)
-    w1: Vec<f32>,
-    /// (layer, dim, hidden_dim)
-    w2: Vec<f32>,
-    /// (layer, hidden_dim, dim)
-    w3: Vec<f32>,
+fn main() -> anyhow::Result<()> {
+    env_logger::init();
+    log::info!("Welcome to LLAMA2-RS");
+    let mut args = Cli::parse();
+    args.param_validation_overrides();
 
-    // final rmsnorm
-    /// (dim,)
-    rms_final_weight: Vec<f32>,
-    /// (optional) classifier weights for the logits, on the last layer
-    wcls: Vec<f32>,
-}
-
-/// current wave of activations
-struct RunState {
-    /// activation at current time stamp (dim,)
-    x: Vec<f32>,
-    /// same, but inside a residual branch (dim,)
-    xb: Vec<f32>,
-    /// an additional buffer just for convenience (dim,)
-    xb2: Vec<f32>,
-    /// buffer for hidden dimension in the ffn (hidden_dim,)
-    hb: Vec<f32>,
-    /// buffer for hidden dimension in the ffn (hidden_dim,)
-    hb2: Vec<f32>,
-    /// query (dim,)
-    q: Vec<f32>,
-    /// key (dim,)
-    k: Vec<f32>,
-    /// value (dim,)
-    v: Vec<f32>,
-    /// buffer for scores/attention values (n_heads, seq_len)
-    att: Vec<f32>,
-    /// output logits
-    logits: Vec<f32>,
-
-    // kv cache
-
-    /// (layer, seq_len, dim)
-    key_cache: Vec<f32>,
-    /// (layer, seq_len, dim)
-    value_cache: Vec<f32>,
-}
-
-struct Transformer {
-    /// the hyperparameters of the architecture (the blueprint)
-    config: Config,
-    /// the weights of the model
-    weights: TransformerWeights,
-    /// buffers for the "wave" of activations in the forward pass
-    state: RunState,
-    /// some more state needed to properly clean up the memory mapping (sigh)
-    fd: i32,
-    /// memory mapped data pointer
-    data: Vec<f32>,
-    /// size of the checkpoint file in bytes
-    file_size: i32,
-}
-
-/* TODO translate from C to Rust:
-
-void memory_map_weights(TransformerWeights *w, Config* p, float* ptr, int shared_weights) {
-    int head_size = p->dim / p->n_heads;
-    // make sure the multiplications below are done in 64bit to fit the parameter counts of 13B+ models
-    unsigned long long n_layers = p->n_layers;
-    w->token_embedding_table = ptr;
-    ptr += p->vocab_size * p->dim;
-    w->rms_att_weight = ptr;
-    ptr += n_layers * p->dim;
-    w->wq = ptr;
-    ptr += n_layers * p->dim * (p->n_heads * head_size);
-    w->wk = ptr;
-    ptr += n_layers * p->dim * (p->n_kv_heads * head_size);
-    w->wv = ptr;
-    ptr += n_layers * p->dim * (p->n_kv_heads * head_size);
-    w->wo = ptr;
-    ptr += n_layers * (p->n_heads * head_size) * p->dim;
-    w->rms_ffn_weight = ptr;
-    ptr += n_layers * p->dim;
-    w->w1 = ptr;
-    ptr += n_layers * p->dim * p->hidden_dim;
-    w->w2 = ptr;
-    ptr += n_layers * p->hidden_dim * p->dim;
-    w->w3 = ptr;
-    ptr += n_layers * p->dim * p->hidden_dim;
-    w->rms_final_weight = ptr;
-    ptr += p->dim;
-    ptr += p->seq_len * head_size / 2; // skip what used to be freq_cis_real (for RoPE)
-    ptr += p->seq_len * head_size / 2; // skip what used to be freq_cis_imag (for RoPE)
-    w->wcls = shared_weights ? w->token_embedding_table : ptr;
-}
- */
-
-impl TransformerWeights {
-    fn memory_map_weights(&mut self, config: &Config, ptr: &mut Vec<f32>, shared_weights: i32) {
-        todo!("memory_map_weights")
+    // build the Transformer via the model .bin file
+    let transformer = Transformer::build_transformer(&args.checkpoint_path)?;
+    if args.steps == 0 || args.steps > transformer.config.seq_len {
+        // override to ~max length
+        args.steps = transformer.config.seq_len;
     }
+
+    // build the Tokenizer via the tokenizer .bin file
+    let tokenizer = Tokenizer::build_tokenizer(&args.tokenizer_path, transformer.config.vocab_size)?;
+
+    // build the Sampler
+    let sampler = Sampler::build_sampler(transformer.config.vocab_size, args.temperature, args.topp, args.rng_seed)?;
+
+    // run!
+    match args.mode {
+        Mode::Generate => {
+            transformer.generate(&tokenizer, &sampler, &args.prompt, args.steps)?;
+        }
+        Mode::Chat => {
+            transformer.chat(&tokenizer, &sampler, &args.prompt, &args.system_prompt, args.steps)?;
+        }
+    }
+
+    Ok(())
 }
 
-impl RunState {
-    fn new(config: &Config) -> RunState {
-        let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
-        let dim = config.dim as usize;
-        let hidden_dim = config.hidden_dim as usize;
-        RunState {
-            x: Vec::with_capacity(dim),
-            xb: Vec::with_capacity(dim),
-            xb2: Vec::with_capacity(dim),
-            hb: Vec::with_capacity(hidden_dim),
-            hb2: Vec::with_capacity(hidden_dim),
-            q: Vec::with_capacity(dim),
-            k: vec![],
-            att: Vec::with_capacity((config.n_heads * config.seq_len) as usize),
-            logits: Vec::with_capacity(config.vocab_size as usize),
-            v: vec![],
-            key_cache: Vec::with_capacity((config.n_layers * config.seq_len * kv_dim) as usize),
-            value_cache: Vec::with_capacity((config.n_layers * config.seq_len * kv_dim) as usize),
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// e.g. out/model.bin
+    checkpoint_path: PathBuf,
+    ///
+    #[arg(short='z', default_value = "tokenizer.bin")]
+    tokenizer_path: PathBuf,
+    /// 0.0 = greedy deterministic. 1.0 = original. don't set higher
+    #[arg(short, default_value = "1.0")]
+    temperature: f32,
+    /// top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
+    #[arg(short='p', default_value = "0.9")]
+    topp: f32,
+    /// number of steps to run for
+    #[arg(short='n', default_value = "256")]
+    steps: usize,
+    /// prompt string
+    #[arg(short='i', default_value = "0")]
+    prompt: String,
+    /// seed rng with time by default
+    #[arg(short='s', default_value = "0")]
+    rng_seed: u64,
+    /// generate|chat
+    #[arg(short='m', default_value = "generate")]
+    mode: Mode,
+    /// the (optional) system prompt to use in chat mode
+    #[arg(short='y')]
+    system_prompt: Option<String>,
+}
+
+impl Cli {
+    fn param_validation_overrides(&mut self) {
+        if self.rng_seed == 0 {
+            self.rng_seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            log::warn!("seed not set, using {}", self.rng_seed)
+        }
+        if self.temperature < 0.0 {
+            log::warn!("stripping temperature to 0.0");
+        }
+        if self.topp < 0.0 || 1.0 < self.topp {
+            self.topp = 0.9;
+            log::warn!("setting topp to {}", self.topp);
         }
     }
 }
 
-fn main() {
-    println!("Hello, world!");
+#[derive(Clone, Parser, Debug)]
+enum Mode {
+    Generate,
+    Chat,
+}
+
+impl FromStr for Mode {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "generate" => Ok(Mode::Generate),
+            "chat" => Ok(Mode::Chat),
+            _ => Err("mode must be 'generate' or 'chat'".to_string()),
+        }
+    }
 }
