@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+mod math;
+mod utilities;
+
 /// Transformer model
 
 pub struct Config {

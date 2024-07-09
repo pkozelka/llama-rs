@@ -6,7 +6,9 @@ use crate::run::{Sampler, Tokenizer, Transformer};
 mod run;
 
 fn main() -> anyhow::Result<()> {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     log::info!("Welcome to LLAMA2-RS");
     let mut args = Cli::parse();
     args.param_validation_overrides();
