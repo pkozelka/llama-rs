@@ -9,7 +9,7 @@ pub struct Config {
     /// transformer dimension
     dim: usize,
     /// for ffn layers
-    hidden_dim: i32,
+    hidden_dim: usize,
     /// number of layers
     n_layers: usize,
     /// number of query heads
@@ -122,10 +122,11 @@ impl TransformerWeights {
 }
 
 impl RunState {
-    fn new(config: &Config) -> RunState {
+    /// constructor
+    fn malloc_run_state(config: &Config) -> RunState {
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
-        let dim = config.dim as usize;
-        let hidden_dim = config.hidden_dim as usize;
+        let dim = config.dim;
+        let hidden_dim = config.hidden_dim;
         RunState {
             x: Vec::with_capacity(dim),
             xb: Vec::with_capacity(dim),
@@ -134,13 +135,15 @@ impl RunState {
             hb2: Vec::with_capacity(hidden_dim),
             q: Vec::with_capacity(dim),
             k: vec![],
-            att: Vec::with_capacity((config.n_heads * config.seq_len) as usize),
-            logits: Vec::with_capacity(config.vocab_size as usize),
+            att: Vec::with_capacity(config.n_heads * config.seq_len),
+            logits: Vec::with_capacity(config.vocab_size),
             v: vec![],
-            key_cache: Vec::with_capacity((config.n_layers * config.seq_len * kv_dim) as usize),
-            value_cache: Vec::with_capacity((config.n_layers * config.seq_len * kv_dim) as usize),
+            key_cache: Vec::with_capacity(config.n_layers * config.seq_len * kv_dim),
+            value_cache: Vec::with_capacity(config.n_layers * config.seq_len * kv_dim),
         }
     }
+
+    // `RunState::free_run_state` is implicit by `drop`
 }
 
 
