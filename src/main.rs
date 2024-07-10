@@ -1,3 +1,7 @@
+//! # LLAMA2-RS
+//! This is simple rewrite of https://github.com/karpathy/llama2.c/blob/master/run.c
+//! Minimum Rust fanciness used.
+//!
 use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;

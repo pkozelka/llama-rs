@@ -1,10 +1,15 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
+
+use byteorder::{LittleEndian, ReadBytesExt};
 
 mod math;
 mod utilities;
 
 /// Transformer model
 
+#[derive(Default)]
 pub struct Config {
     /// transformer dimension
     dim: usize,
@@ -20,8 +25,11 @@ pub struct Config {
     pub vocab_size: usize,
     /// max sequence length
     pub seq_len: usize,
+
+    shared_weights: bool,
 }
 
+#[derive(Default)]
 struct TransformerWeights {
     /// token embedding table
     /// (vocab_size, dim)
@@ -55,6 +63,7 @@ struct TransformerWeights {
 }
 
 /// current wave of activations
+#[derive(Default)]
 struct RunState {
     /// activation at current time stamp (dim,)
     x: Vec<f32>,
@@ -85,6 +94,7 @@ struct RunState {
     value_cache: Vec<f32>,
 }
 
+#[derive(Default)]
 pub struct Transformer {
     /// the hyperparameters of the architecture (the blueprint)
     pub config: Config,
@@ -100,9 +110,51 @@ pub struct Transformer {
     file_size: i32,
 }
 
+impl Config {
+    pub(crate) fn read_config(reader: &mut BufReader<File>) -> anyhow::Result<Self> {
+        let dim = reader.read_i32::<LittleEndian>()?;
+        let hidden_dim = reader.read_i32::<LittleEndian>()?;
+        let n_layers = reader.read_i32::<LittleEndian>()?;
+        let n_heads = reader.read_i32::<LittleEndian>()?;
+        let n_kv_heads = reader.read_i32::<LittleEndian>()?;
+        let vocab_size = reader.read_i32::<LittleEndian>()?;
+        let seq_len = reader.read_i32::<LittleEndian>()?;
+
+        // negative vocab size is hacky way of signaling unshared weights. bit yikes.
+        let shared_weights = vocab_size > 0;
+        let vocab_size = vocab_size.abs();
+
+        Ok(Self {
+            dim: dim as usize,
+            hidden_dim: hidden_dim as usize,
+            n_layers: n_layers as usize,
+            n_heads: n_heads as usize,
+            n_kv_heads: n_kv_heads as usize,
+            vocab_size: vocab_size as usize,
+            seq_len: seq_len as usize,
+            shared_weights,
+        })
+    }
+}
+
 impl Transformer {
     pub(crate) fn build_transformer(checkpoint_path: &PathBuf) -> anyhow::Result<Self> {
-        todo!()
+        let mut transformer = Self::default();
+        transformer.read_checkpoint(checkpoint_path)?;
+        transformer.state = RunState::malloc_run_state(&transformer.config);
+        Ok(transformer)
+    }
+
+    fn read_checkpoint(&mut self, checkpoint_path: &PathBuf) -> anyhow::Result<()> {
+        let file = File::open(checkpoint_path)?;
+        let mut reader = BufReader::new(file);
+        // read in the config header from reader
+        let config = Config::read_config(&mut reader)?;
+        // ORIGINAL: memory map the Transformer weights into the data pointer
+        //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
+        // INSTEAD: we just read the weights, as mmap is not easily available in Rust
+        self.weights.read_weights(&mut reader, &config)?;
+        Ok(())
     }
 
     pub(crate) fn generate(&self, p0: &Tokenizer, p1: &Sampler, p2: &String, p3: usize) -> anyhow::Result<()> {
@@ -116,8 +168,51 @@ impl Transformer {
 
 
 impl TransformerWeights {
-    fn memory_map_weights(&mut self, config: &Config, ptr: &mut Vec<f32>, shared_weights: i32) {
-        todo!("memory_map_weights")
+    fn _memory_map_weights(&mut self, config: &Config, ptr: &mut Vec<f32>, shared_weights: i32) {
+        unimplemented!("memory mapping is not easily available in Rust, so we read the weights into memory")
+    }
+
+    fn read_weights(&mut self, reader: &mut BufReader<File>, config: &Config) -> anyhow::Result<()> {
+        let dim = config.dim;
+        let hidden_dim = config.hidden_dim;
+        let n_layers = config.n_layers;
+        let n_heads = config.n_heads;
+        let n_kv_heads = config.n_kv_heads;
+
+        // read in the token embedding table
+        let token_embedding_table = utilities::read_f32_table(reader, config.vocab_size, dim)?;
+        // read in the rmsnorm weights
+        let rms_att_weight = utilities::read_f32_table(reader, n_layers, dim)?;
+        let rms_ffn_weight = utilities::read_f32_table(reader, n_layers, dim)?;
+        // read in the q, k, v, and o weights
+        let wq = utilities::read_f32_table(reader, n_layers, dim * n_heads)?;
+        let wk = utilities::read_f32_table(reader, n_layers, dim * n_kv_heads)?;
+        let wv = utilities::read_f32_table(reader, n_layers, dim * n_kv_heads)?;
+        let wo = utilities::read_f32_table(reader, n_layers, n_heads * dim)?;
+        // read in the ffn weights
+        let w1 = utilities::read_f32_table(reader, n_layers, hidden_dim * dim)?;
+        let w2 = utilities::read_f32_table(reader, n_layers, dim * hidden_dim)?;
+        let w3 = utilities::read_f32_table(reader, n_layers, hidden_dim * dim)?;
+        // read in the final rmsnorm weights
+        let rms_final_weight = utilities::read_f32_table(reader, dim, 1)?;
+        // read in the classifier weights
+        let wcls = utilities::read_f32_table(reader, config.vocab_size, dim)?;
+
+        // assign the weights
+        self.token_embedding_table = token_embedding_table;
+        self.rms_att_weight = rms_att_weight;
+        self.rms_ffn_weight = rms_ffn_weight;
+        self.wq = wq;
+        self.wk = wk;
+        self.wv = wv;
+        self.wo = wo;
+        self.w1 = w1;
+        self.w2 = w2;
+        self.w3 = w3;
+        self.rms_final_weight = rms_final_weight;
+        self.wcls = wcls;
+
+        Ok(())
     }
 }
 
