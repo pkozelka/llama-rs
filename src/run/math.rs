@@ -34,6 +34,20 @@ pub fn rmsnorm(o: &mut [f32], x: &[f32], weight: &[f32]) {
         o[j] = weight[j] * (ss * x[j]);
     }
 }
+pub fn rmsnorm_inplace(x: &mut [f32], weight: &[f32]) {
+    // calculate sum of squares
+    let mut ss = 0.0;
+    for j in 0..x.len() {
+        ss += x[j] * x[j];
+    }
+    ss /= x.len() as f32;
+    ss += 1e-5;
+    ss = 1.0 / ss.sqrt();
+    // normalize and scale
+    for j in 0..x.len() {
+        x[j] = weight[j] * (ss * x[j]);
+    }
+}
 
 pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, d: usize) {
     // W (d,n) @ x (n,) -> xout (d,)

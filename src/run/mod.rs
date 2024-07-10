@@ -7,6 +7,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 mod math;
 mod utilities;
 
+mod forward;
+
 /// Transformer model
 
 #[derive(Default)]
