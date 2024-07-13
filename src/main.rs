@@ -5,9 +5,11 @@
 use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
-use crate::run::{Sampler, Tokenizer, Transformer};
+use crate::run::{Sampler, Transformer};
 
 mod run;
+
+struct Tokenizer(PathBuf, usize);
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()

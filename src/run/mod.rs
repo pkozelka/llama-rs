@@ -3,11 +3,13 @@ use std::io::BufReader;
 use std::path::PathBuf;
 
 use byteorder::{LittleEndian, ReadBytesExt};
+use crate::run::tokenizer::Tokenizer;
 
 mod math;
 mod utilities;
 
 mod forward;
+mod tokenizer;
 
 /// Transformer model
 
@@ -139,6 +141,64 @@ impl Config {
     }
 }
 
+/* translate from C:
+
+    char *empty_prompt = "";
+    if (prompt == NULL) { prompt = empty_prompt; }
+
+    // encode the (string) prompt into tokens sequence
+    int num_prompt_tokens = 0;
+    int* prompt_tokens = (int*)malloc((strlen(prompt)+3) * sizeof(int)); // +3 for '\0', ?BOS, ?EOS
+    encode(tokenizer, prompt, 1, 0, prompt_tokens, &num_prompt_tokens);
+    if (num_prompt_tokens < 1) {
+        fprintf(stderr, "something is wrong, expected at least 1 prompt token\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // start the main loop
+    long start = 0;  // used to time our code, only initialized after first iteration
+    int next;        // will store the next token in the sequence
+    int token = prompt_tokens[0]; // kick off with the first token in the prompt
+    int pos = 0;     // position in the sequence
+    while (pos < steps) {
+
+        // forward the transformer to get logits for the next token
+        float* logits = forward(transformer, token, pos);
+
+        // advance the state machine
+        if (pos < num_prompt_tokens - 1) {
+            // if we are still processing the input prompt, force the next prompt token
+            next = prompt_tokens[pos + 1];
+        } else {
+            // otherwise sample the next token from the logits
+            next = sample(sampler, logits);
+        }
+        pos++;
+
+        // data-dependent terminating condition: the BOS (=1) token delimits sequences
+        if (next == 1) { break; }
+
+        // print the token as string, decode it with the Tokenizer object
+        char* piece = decode(tokenizer, token, next);
+        safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
+        fflush(stdout);
+        token = next;
+
+        // init the timer here because the first iteration can be slower
+        if (start == 0) { start = time_in_ms(); }
+    }
+    printf("\n");
+
+    // report achieved tok/s (pos-1 because the timer starts after first iteration)
+    if (pos > 1) {
+        long end = time_in_ms();
+        fprintf(stderr, "achieved tok/s: %f\n", (pos-1) / (double)(end-start)*1000);
+    }
+
+    free(prompt_tokens);
+}
+
+ */
 impl Transformer {
     pub(crate) fn build_transformer(checkpoint_path: &PathBuf) -> anyhow::Result<Self> {
         let mut transformer = Self::default();
@@ -159,11 +219,11 @@ impl Transformer {
         Ok(())
     }
 
-    pub(crate) fn generate(&self, p0: &Tokenizer, p1: &Sampler, p2: &String, p3: usize) -> anyhow::Result<()> {
+    pub(crate) fn generate(&self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &String, steps: usize) -> anyhow::Result<()> {
         todo!()
     }
 
-    pub(crate) fn chat(&self, p0: &Tokenizer, p1: &Sampler, p2: &String, p3: &Option<String>, p4: usize) -> anyhow::Result<()> {
+    pub(crate) fn chat(&self, tokenizer: &Tokenizer, sampler: &Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -241,36 +301,6 @@ impl RunState {
     }
 
     // `RunState::free_run_state` is implicit by `drop`
-}
-
-
-// ----------------------------------------------------------------------------
-// The Byte Pair Encoding (BPE) Tokenizer that translates strings <-> tokens
-
-pub struct Tokenizer {
-    /// the vocabulary of the tokenizer
-    vocab: Vec<String>,
-    /// the scores of the vocabulary
-    vocab_scores: Vec<f32>,
-    /// the sorted vocabulary
-    sorted_vocab: Box<TokenIndex>,
-    /// the size of the vocabulary
-    vocab_size: usize,
-    /// the maximum token length
-    max_token_length: usize,
-    /// the byte pieces
-    byte_pieces: Vec<u8>,
-}
-
-impl Tokenizer {
-    pub(crate) fn build_tokenizer(tokenizer_path: &PathBuf, vocab_size: usize) -> anyhow::Result<Self> {
-        todo!()
-    }
-}
-
-struct TokenIndex {
-    str: String,
-    id: i32,
 }
 
 
