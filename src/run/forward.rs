@@ -3,6 +3,7 @@ use crate::run::Transformer;
 
 impl Transformer {
     pub fn forward<'a>(&'a mut self, token: usize, pos: usize) -> anyhow::Result<&'a [f32]> {
+        log::debug!("forward(token={}, pos={})", token, pos);
         let p = &self.config;
         let w = &self.weights;
         let s = &mut self.state;
@@ -15,15 +16,18 @@ impl Transformer {
 
         // copy the token embedding into x
         let content_row = &w.token_embedding_table[token * dim..];
-        x.copy_from_slice(content_row);
+        let content_row = &content_row[..dim];
+        *x = content_row.to_vec();
 
         // forward all the layers
         for l in 0..p.n_layers {
             // attention rmsnorm
-            rmsnorm(&mut s.xb, x, &w.rms_att_weight[l * dim..]);
+            let weight = &w.rms_att_weight[l * dim..];
+            let weight = &weight[..dim];
+            rmsnorm(&mut s.xb, x, weight);
 
             // key and value point to the kv cache
-            let loff = l * p.seq_len * kv_dim;
+            let loff = l * p.seq_len * kv_dim; // kv cache layer offset for convenience
             s.k = s.key_cache[loff + pos * kv_dim..].to_vec(); //TODO: avoid this copy
             s.v = s.value_cache[loff + pos * kv_dim..].to_vec(); //TODO: avoid this copy
 
@@ -50,6 +54,7 @@ impl Transformer {
             }
 
             // multihead attention. iterate over all heads
+            // #pragma omp parallel for private(h) //TODO: parallelize this with rayon
             for h in 0..p.n_heads {
                 // get the query vector for this head
                 let q = &s.q[h * head_size..];

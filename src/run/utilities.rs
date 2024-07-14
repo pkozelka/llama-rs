@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::time::{SystemTime, UNIX_EPOCH};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-pub fn _safe_printf(piece: &str) {
+pub fn safe_printf(piece: &str) {
     // piece might be a raw byte token, and we only want to print printable chars or whitespace
     // because some of the other bytes can be various control codes, backspace, etc.
     if piece.is_empty() { return; }
@@ -13,7 +13,7 @@ pub fn _safe_printf(piece: &str) {
             return; // bad byte, don't print it
         }
     }
-    println!("{}", piece);
+    print!("{}", piece);
 }
 
 pub fn time_in_ms() -> i64 {

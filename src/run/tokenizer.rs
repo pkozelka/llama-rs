@@ -78,7 +78,7 @@ impl Tokenizer {
             log::debug!("encode: vocab_size={}", self.vocab_size);
             for id in 0..self.vocab_size {
                 let token_index = TokenIndex { str: self.vocab[id].clone(), id };
-                log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
+                // log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
 
                 sorted_vocab.push(token_index);
             }
@@ -182,4 +182,40 @@ impl Tokenizer {
             Err(_) => None,
         }
     }
+
+    /* from C:
+char* decode(Tokenizer* t, int prev_token, int token) {
+    char *piece = t->vocab[token];
+    // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
+    if (prev_token == 1 && piece[0] == ' ') { piece++; }
+    // careful, some tokens designate raw bytes, and look like e.g. '<0x01>'
+    // parse this and convert and return the actual byte
+    unsigned char byte_val;
+    if (sscanf(piece, "<0x%02hhX>", &byte_val) == 1) {
+        piece = (char*)t->byte_pieces + byte_val * 2;
+    }
+    return piece;
+}
+
+     */
+    pub fn decode(&self, prev_token: i32, token: i32) -> String {
+        let piece = &self.vocab[token as usize];
+        // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
+        if prev_token == 1 && piece.starts_with(' ') {
+            return piece[1..].to_string();
+        }
+        // careful, some tokens designate raw bytes, and look like e.g. '<0x01>'
+        // parse this and convert and return the actual byte
+        if let Some(byte_val) = piece.strip_prefix("<0x") {
+            if let Ok(byte_val) = u8::from_str_radix(byte_val, 16) {
+                let byte_val = byte_val as usize;
+                let byte_val = byte_val * 2;
+                let byte_val = byte_val as usize;
+                let byte_val = byte_val as usize;
+                return String::from_utf8_lossy(&self.byte_pieces[byte_val..byte_val + 2]).to_string();
+            }
+        }
+        piece.to_string()
+    }
+
 }

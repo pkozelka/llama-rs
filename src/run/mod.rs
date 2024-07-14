@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::path::PathBuf;
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -175,11 +175,12 @@ impl Transformer {
         let mut token = prompt_tokens[0] as i32;
         let mut pos = 0;
         while pos < steps {
+            log::debug!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
             let logits = self.forward(token as usize, pos)?;
             // advance the state machine
             let next: i32;
-            if pos < num_prompt_tokens - 1 {
+            if pos + 1 < num_prompt_tokens {
                 // if we are still processing the input prompt, force the next prompt token
                 next = prompt_tokens[pos + 1] as i32;
             } else {
@@ -190,9 +191,9 @@ impl Transformer {
             // data-dependent terminating condition: the BOS (=1) token delimits sequences
             if next == 1 { break; }
             // print the token as string, decode it with the Tokenizer object
-            // let piece = decode(tokenizer, token, next);
-            // safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
-            // fflush(stdout);
+            let piece = tokenizer.decode(token, next);
+            utilities::safe_printf(&piece); // same as printf("%s", piece), but skips "unsafe" bytes
+            std::io::stdout().flush()?;
             token = next;
             // init the timer here because the first iteration can be slower
             if start == 0 { start = utilities::time_in_ms(); }
@@ -217,30 +218,38 @@ impl TransformerWeights {
         unimplemented!("memory mapping is not easily available in Rust, so we read the weights into memory")
     }
 
-    fn read_weights(&mut self, reader: &mut BufReader<File>, config: &Config) -> anyhow::Result<()> {
-        let dim = config.dim;
-        let hidden_dim = config.hidden_dim;
-        let n_layers = config.n_layers;
-        let n_heads = config.n_heads;
-        let n_kv_heads = config.n_kv_heads;
+    /// currently we have this instead of memory_map_weights()
+    fn read_weights(&mut self, reader: &mut BufReader<File>, p: &Config) -> anyhow::Result<()> {
+        let head_size = p.dim / p.n_heads;
+        let hidden_dim = p.hidden_dim;
+        let n_layers = p.n_layers;
 
-        // read in the token embedding table
-        let token_embedding_table = utilities::read_f32_table(reader, config.vocab_size, dim)?;
-        // read in the rmsnorm weights
-        let rms_att_weight = utilities::read_f32_table(reader, n_layers, dim)?;
-        let rms_ffn_weight = utilities::read_f32_table(reader, n_layers, dim)?;
-        // read in the q, k, v, and o weights
-        let wq = utilities::read_f32_table(reader, n_layers, dim * n_heads)?;
-        let wk = utilities::read_f32_table(reader, n_layers, dim * n_kv_heads)?;
-        let wv = utilities::read_f32_table(reader, n_layers, dim * n_kv_heads)?;
-        let wo = utilities::read_f32_table(reader, n_layers, n_heads * dim)?;
-        // read in the ffn weights
-        let w1 = utilities::read_f32_table(reader, n_layers, hidden_dim * dim)?;
-        let w2 = utilities::read_f32_table(reader, n_layers, dim * hidden_dim)?;
-        let w3 = utilities::read_f32_table(reader, n_layers, hidden_dim * dim)?;
-        // read in the final rmsnorm weights
-        let rms_final_weight = utilities::read_f32_table(reader, dim, 1)?;
-        // read in the classifier weights
+        let token_embedding_table = utilities::read_f32_table(reader, p.vocab_size, p.dim)?;
+
+        let rms_att_weight = utilities::read_f32_table(reader, n_layers, p.dim)?;
+
+        let wq = utilities::read_f32_table(reader, n_layers, p.dim * (p.n_heads * head_size))?;
+        let wk = utilities::read_f32_table(reader, n_layers, p.dim * (p.n_kv_heads * head_size))?;
+        let wv = utilities::read_f32_table(reader, n_layers, p.dim * (p.n_kv_heads * head_size))?;
+        let wo = utilities::read_f32_table(reader, n_layers, p.dim * (p.n_heads * head_size))?;
+        //
+        let rms_ffn_weight = utilities::read_f32_table(reader, n_layers, p.dim)?;
+
+        let w1 = utilities::read_f32_table(reader, n_layers, p.dim * hidden_dim)?;
+        let w2 = utilities::read_f32_table(reader, n_layers, p.dim * hidden_dim)?;
+        let w3 = utilities::read_f32_table(reader, n_layers, p.dim * hidden_dim)?;
+
+        let rms_final_weight = utilities::read_f32_table(reader, 1, p.dim)?;
+
+        log::debug!("shared_weights: {}", p.shared_weights);
+        let wcls = if p.shared_weights {
+            token_embedding_table.clone()
+        } else {
+            reader.seek_relative((p.seq_len * head_size / 2) as i64)?; // skip what used to be freq_cis_real (for RoPE)
+            reader.seek_relative((p.seq_len * head_size / 2) as i64)?; // skip what used to be freq_cis_imag (for RoPE)
+            utilities::read_f32_table(reader, p.vocab_size, p.dim)?
+        };
+        log::debug!("wcls.len={}", wcls.len());
 
         // assign the weights
         self.token_embedding_table = token_embedding_table;
@@ -254,11 +263,7 @@ impl TransformerWeights {
         self.w2 = w2;
         self.w3 = w3;
         self.rms_final_weight = rms_final_weight;
-        if config.shared_weights {
-            self.wcls = self.token_embedding_table.clone();
-        } else {
-            self.wcls = utilities::read_f32_table(reader, config.vocab_size, dim)?;
-        }
+        self.wcls = wcls;
 
         Ok(())
     }
@@ -272,18 +277,18 @@ impl RunState {
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;
         RunState {
-            x: Vec::with_capacity(dim),
-            xb: Vec::with_capacity(dim),
-            xb2: Vec::with_capacity(dim),
-            hb: Vec::with_capacity(hidden_dim),
-            hb2: Vec::with_capacity(hidden_dim),
-            q: Vec::with_capacity(dim),
-            k: vec![],
-            att: Vec::with_capacity(config.n_heads * config.seq_len),
-            logits: Vec::with_capacity(config.vocab_size),
-            v: vec![],
-            key_cache: Vec::with_capacity(config.n_layers * config.seq_len * kv_dim),
-            value_cache: Vec::with_capacity(config.n_layers * config.seq_len * kv_dim),
+            x: vec![0.0; dim],
+            xb: vec![0.0; dim],
+            xb2: vec![0.0; dim],
+            hb: vec![0.0; hidden_dim],
+            hb2: vec![0.0; hidden_dim],
+            q: vec![0.0; dim],
+            k: vec![0.0; dim],
+            att: vec![0.0; config.n_heads * config.seq_len],
+            logits: vec![0.0; config.vocab_size],
+            v: vec![0.0; dim],
+            key_cache: vec![0.0; config.n_layers * config.seq_len * kv_dim],
+            value_cache: vec![0.0; config.n_layers * config.seq_len * kv_dim],
         }
     }
 
