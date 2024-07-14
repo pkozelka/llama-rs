@@ -1,8 +1,9 @@
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use byteorder::{LittleEndian, ReadBytesExt};
+
 use crate::run::sampler::Sampler;
 use crate::run::tokenizer::Tokenizer;
 
@@ -175,9 +176,10 @@ impl Transformer {
         let mut token = prompt_tokens[0] as i32;
         let mut pos = 0;
         while pos < steps {
-            log::debug!("generate: pos: {}", pos);
+            // log::debug!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
             let logits = self.forward(token as usize, pos)?;
+            log::trace!("logits: {:?}", logits.len());
             // advance the state machine
             let next: i32;
             if pos + 1 < num_prompt_tokens {
@@ -192,8 +194,8 @@ impl Transformer {
             if next == 1 { break; }
             // print the token as string, decode it with the Tokenizer object
             let piece = tokenizer.decode(token, next);
+            log::debug!("token: {} next: {} piece: {}", token, next, piece);
             utilities::safe_printf(&piece); // same as printf("%s", piece), but skips "unsafe" bytes
-            std::io::stdout().flush()?;
             token = next;
             // init the timer here because the first iteration can be slower
             if start == 0 { start = utilities::time_in_ms(); }
@@ -241,7 +243,7 @@ impl TransformerWeights {
 
         let rms_final_weight = utilities::read_f32_table(reader, 1, p.dim)?;
 
-        log::debug!("shared_weights: {}", p.shared_weights);
+        // log::debug!("shared_weights: {}", p.shared_weights);
         let wcls = if p.shared_weights {
             token_embedding_table.clone()
         } else {
@@ -249,7 +251,7 @@ impl TransformerWeights {
             reader.seek_relative((p.seq_len * head_size / 2) as i64)?; // skip what used to be freq_cis_imag (for RoPE)
             utilities::read_f32_table(reader, p.vocab_size, p.dim)?
         };
-        log::debug!("wcls.len={}", wcls.len());
+        // log::debug!("wcls.len={}", wcls.len());
 
         // assign the weights
         self.token_embedding_table = token_embedding_table;
@@ -272,7 +274,7 @@ impl TransformerWeights {
 impl RunState {
     /// constructor
     fn malloc_run_state(config: &Config) -> RunState {
-        log::debug!("malloc_run_state(config={:?})", config);
+        // log::debug!("malloc_run_state(config={:?})", config);
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;

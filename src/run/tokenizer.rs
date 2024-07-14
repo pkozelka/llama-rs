@@ -28,7 +28,7 @@ struct TokenIndex {
 impl Tokenizer {
 
     pub fn build_tokenizer(tokenizer_path: &PathBuf, vocab_size: usize) -> anyhow::Result<Self> {
-        log::debug!("build_tokenizer(tokenizer_path='{}', vocab_size={})", tokenizer_path.display(), vocab_size);
+        // log::debug!("build_tokenizer(tokenizer_path='{}', vocab_size={})", tokenizer_path.display(), vocab_size);
         // read in the tokenizer file
         let mut tokenizer = Tokenizer {
             vocab: Vec::with_capacity(vocab_size),
@@ -65,7 +65,7 @@ impl Tokenizer {
     }
 
     pub fn encode(&mut self, text: &str, bos: bool, eos: bool) -> anyhow::Result<Vec<usize>> {
-        log::debug!("encode(text='{}', bos={}, eos={})", text, bos, eos);
+        // log::debug!("encode(text='{}', bos={}, eos={})", text, bos, eos);
         // encode the string text (input) into an upper-bound preallocated tokens[] array
         // bos != 0 means prepend the BOS token (=1), eos != 0 means append the EOS token (=2)
         if text.is_empty() {
@@ -75,7 +75,7 @@ impl Tokenizer {
         // lazily malloc and sort the vocabulary
         if self.sorted_vocab.is_empty() {
             let mut sorted_vocab = Vec::with_capacity(self.vocab_size);
-            log::debug!("encode: vocab_size={}", self.vocab_size);
+            // log::debug!("encode: vocab_size={}", self.vocab_size);
             for id in 0..self.vocab_size {
                 let token_index = TokenIndex { str: self.vocab[id].clone(), id };
                 // log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
@@ -126,7 +126,7 @@ impl Tokenizer {
         if eos {
             tokens.push(2);
         }
-        log::debug!("encode: n_tokens={}", tokens.len());
+        // log::debug!("encode: n_tokens={}", tokens.len());
 
         Ok(tokens)
     }
@@ -154,12 +154,12 @@ impl Tokenizer {
             str_buffer.push(c);
             match self.str_lookup(&str_buffer) {
                 Some(id) => {
-                    log::debug!("encode: str_buffer: '{}' -> id={}", str_buffer, id);
+                    // log::debug!("encode: str_buffer: '{}' -> id={}", str_buffer, id);
                     tokens.push(id)
                 },
                 None => {
                     // PK: this is nearly impossible to happen
-                    log::debug!("encode: str_buffer: '{}' -> id=NONE", str_buffer);
+                    // log::debug!("encode: str_buffer: '{}' -> id=NONE", str_buffer);
                     // byte_fallback encoding: just encode each byte as a token
                     for byte in str_buffer.bytes() {
                         // +3 is here because the first 3 vocab elements are <unk>, <s>, </s>

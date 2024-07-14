@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -14,6 +14,11 @@ pub fn safe_printf(piece: &str) {
         }
     }
     print!("{}", piece);
+    let _ = std::io::stdout().flush();
+    if log::log_enabled!(log::Level::Debug) {
+        println!();
+        let _ = std::io::stderr().flush();
+    }
 }
 
 pub fn time_in_ms() -> i64 {
@@ -24,7 +29,7 @@ pub fn time_in_ms() -> i64 {
 }
 
 pub(crate) fn read_f32_table(reader: &mut BufReader<File>, layers: usize, size: usize) -> anyhow::Result<Vec<f32>> {
-    log::debug!("read_f32_table(layers={}, size={})", layers, size);
+    // log::debug!("read_f32_table(layers={}, size={})", layers, size);
     let mut table = vec![0.0; layers * size];
     reader.read_f32_into::<LittleEndian>(&mut table)?;
     Ok(table)
