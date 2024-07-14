@@ -6,14 +6,13 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
 use crate::run::{Sampler, Transformer};
+use crate::run::tokenizer::Tokenizer;
 
 mod run;
 
-struct Tokenizer(PathBuf, usize);
-
 fn main() -> anyhow::Result<()> {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Debug)
         .init();
     log::info!("Welcome to LLAMA2-RS");
     let mut args = Cli::parse();
@@ -27,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // build the Tokenizer via the tokenizer .bin file
-    let tokenizer = Tokenizer::build_tokenizer(&args.tokenizer_path, transformer.config.vocab_size)?;
+    let mut tokenizer = Tokenizer::build_tokenizer(&args.tokenizer_path, transformer.config.vocab_size)?;
 
     // build the Sampler
     let sampler = Sampler::build_sampler(transformer.config.vocab_size, args.temperature, args.topp, args.rng_seed)?;
@@ -35,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     // run!
     match args.mode {
         Mode::Generate => {
-            transformer.generate(&tokenizer, &sampler, &args.prompt, args.steps)?;
+            transformer.generate(&mut tokenizer, &sampler, &args.prompt, args.steps)?;
         }
         Mode::Chat => {
             transformer.chat(&tokenizer, &sampler, &args.prompt, &args.system_prompt, args.steps)?;
@@ -51,7 +50,7 @@ struct Cli {
     /// e.g. out/model.bin
     checkpoint_path: PathBuf,
     ///
-    #[arg(short='z', default_value = "tokenizer.bin")]
+    #[arg(short='z', default_value = "../llama2.c/tokenizer.bin")]
     tokenizer_path: PathBuf,
     /// 0.0 = greedy deterministic. 1.0 = original. don't set higher
     #[arg(short, default_value = "1.0")]

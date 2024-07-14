@@ -9,11 +9,11 @@ mod math;
 mod utilities;
 
 mod forward;
-mod tokenizer;
+pub mod tokenizer;
 
 /// Transformer model
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub struct Config {
     /// transformer dimension
     dim: usize,
@@ -211,16 +211,115 @@ impl Transformer {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
-        let config = Config::read_config(&mut reader)?;
+        self.config = Config::read_config(&mut reader)?;
+        log::debug!("config: {:?}", self.config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
         // INSTEAD: we just read the weights, as mmap is not easily available in Rust
-        self.weights.read_weights(&mut reader, &config)?;
+        self.weights.read_weights(&mut reader, &self.config)?;
         Ok(())
     }
 
-    pub(crate) fn generate(&self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &String, steps: usize) -> anyhow::Result<()> {
-        todo!()
+    /* translate from C:
+    void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, char *prompt, int steps) {
+    char *empty_prompt = "";
+    if (prompt == NULL) { prompt = empty_prompt; }
+
+    // encode the (string) prompt into tokens sequence
+    int num_prompt_tokens = 0;
+    int* prompt_tokens = (int*)malloc((strlen(prompt)+3) * sizeof(int)); // +3 for '\0', ?BOS, ?EOS
+    encode(tokenizer, prompt, 1, 0, prompt_tokens, &num_prompt_tokens);
+    if (num_prompt_tokens < 1) {
+        fprintf(stderr, "something is wrong, expected at least 1 prompt token\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // start the main loop
+    long start = 0;  // used to time our code, only initialized after first iteration
+    int next;        // will store the next token in the sequence
+    int token = prompt_tokens[0]; // kick off with the first token in the prompt
+    int pos = 0;     // position in the sequence
+    while (pos < steps) {
+
+        // forward the transformer to get logits for the next token
+        float* logits = forward(transformer, token, pos);
+
+        // advance the state machine
+        if (pos < num_prompt_tokens - 1) {
+            // if we are still processing the input prompt, force the next prompt token
+            next = prompt_tokens[pos + 1];
+        } else {
+            // otherwise sample the next token from the logits
+            next = sample(sampler, logits);
+        }
+        pos++;
+
+        // data-dependent terminating condition: the BOS (=1) token delimits sequences
+        if (next == 1) { break; }
+
+        // print the token as string, decode it with the Tokenizer object
+        char* piece = decode(tokenizer, token, next);
+        safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
+        fflush(stdout);
+        token = next;
+
+        // init the timer here because the first iteration can be slower
+        if (start == 0) { start = time_in_ms(); }
+    }
+    printf("\n");
+
+    // report achieved tok/s (pos-1 because the timer starts after first iteration)
+    if (pos > 1) {
+        long end = time_in_ms();
+        fprintf(stderr, "achieved tok/s: %f\n", (pos-1) / (double)(end-start)*1000);
+    }
+
+    free(prompt_tokens);
+}
+
+     */
+
+    pub(crate) fn generate(&self, tokenizer: &mut Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+        let num_prompt_tokens = 0;
+        let prompt_tokens = tokenizer.encode(prompt, true, false)?;
+        // if num_prompt_tokens < 1 {
+        //     eprintln!("something is wrong, expected at least 1 prompt token");
+        //     return Err(anyhow::anyhow!("something is wrong, expected at least 1 prompt token"));
+        // }
+
+        let mut start = 0;
+        let mut next = 0;
+        let mut token = prompt_tokens[0];
+        let mut pos = 0;
+        while pos < steps {
+            // forward the transformer to get logits for the next token
+            // let logits = forward(transformer, token, pos);
+            // advance the state machine
+            if pos < num_prompt_tokens - 1 {
+                // if we are still processing the input prompt, force the next prompt token
+                next = prompt_tokens[pos + 1];
+            } else {
+                // otherwise sample the next token from the logits
+                // next = sample(sampler, logits);
+            }
+            pos += 1;
+            // data-dependent terminating condition: the BOS (=1) token delimits sequences
+            if next == 1 { break; }
+            // print the token as string, decode it with the Tokenizer object
+            // let piece = decode(tokenizer, token, next);
+            // safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
+            // fflush(stdout);
+            token = next;
+            // init the timer here because the first iteration can be slower
+            if start == 0 { start = utilities::time_in_ms(); }
+        }
+        println!();
+        // report achieved tok/s (pos-1 because the timer starts after first iteration)
+        if pos > 1 {
+            let end = utilities::time_in_ms();
+            eprintln!("achieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
+        }
+        Ok(())
     }
 
     pub(crate) fn chat(&self, tokenizer: &Tokenizer, sampler: &Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
@@ -258,7 +357,6 @@ impl TransformerWeights {
         // read in the final rmsnorm weights
         let rms_final_weight = utilities::read_f32_table(reader, dim, 1)?;
         // read in the classifier weights
-        let wcls = utilities::read_f32_table(reader, config.vocab_size, dim)?;
 
         // assign the weights
         self.token_embedding_table = token_embedding_table;
@@ -272,7 +370,11 @@ impl TransformerWeights {
         self.w2 = w2;
         self.w3 = w3;
         self.rms_final_weight = rms_final_weight;
-        self.wcls = wcls;
+        if config.shared_weights {
+            self.wcls = self.token_embedding_table.clone();
+        } else {
+            self.wcls = utilities::read_f32_table(reader, config.vocab_size, dim)?;
+        }
 
         Ok(())
     }
@@ -281,6 +383,7 @@ impl TransformerWeights {
 impl RunState {
     /// constructor
     fn malloc_run_state(config: &Config) -> RunState {
+        log::debug!("malloc_run_state(config={:?})", config);
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;
@@ -331,6 +434,8 @@ pub struct Sampler {
 
 impl Sampler {
     pub(crate) fn build_sampler(vocab_size: usize, temperature: f32, topp: f32, rng_seed: u64) -> anyhow::Result<Self> {
-        todo!()
+        let probindex = Box::new(ProbIndex { prob: 0.0, index: 0 });
+        Ok(Self { vocab_size, probindex, temperature, topp, rng_seed })
+        //TODO!!!
     }
 }
