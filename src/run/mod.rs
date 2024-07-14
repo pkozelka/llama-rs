@@ -163,7 +163,7 @@ impl Transformer {
         Ok(())
     }
 
-    pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &mut Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
         let num_prompt_tokens = 0;
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
         // if num_prompt_tokens < 1 {

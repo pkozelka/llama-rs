@@ -2,7 +2,6 @@
 //! The Sampler, which takes logits and returns a sampled token
 //! sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
 
-use rand::{Rng, SeedableRng};
 use crate::run::math::softmax;
 
 pub struct ProbIndex {
@@ -31,7 +30,7 @@ impl Sampler {
         Ok(Self { vocab_size, _probindex: probindex, temperature, topp, rng_seed })
     }
 
-    pub fn sample(&self, logits: &[f32]) -> i32 {
+    pub fn sample(&mut self, logits: &[f32]) -> i32 {
         // sample the token given the logits and some hyperparameters
         if self.temperature == 0.0 {
             // greedy argmax sampling: take the token with the highest probability
@@ -45,7 +44,8 @@ impl Sampler {
             // apply softmax to the logits to get the probabilities for next token
             softmax(&mut logits);
             // flip a (float) coin (this is our source of entropy for sampling)
-            let coin = random_f32(self.rng_seed);
+            let coin = random_f32(&mut self.rng_seed);
+            log::debug!("sample::coin: {}", coin);
             // we sample from this distribution to get the next token
             if self.topp <= 0.0 || self.topp >= 1.0 {
                 // simply sample from the predicted probability distribution
@@ -58,11 +58,17 @@ impl Sampler {
     }
 }
 
+fn random_u32(state: &mut u64) -> u32 {
+    // xorshift rng: https://en.wikipedia.org/wiki/Xorshift#xorshift.2A
+    *state = *state ^ (*state >> 12);
+    *state ^= *state << 25;
+    *state ^= *state >> 27;
+    (unsafe { state.unchecked_mul(0x2545F4914F6CDD1D_u64)} >> 32) as u32
+}
 
-fn random_f32(seed: u64) -> f32 {
-    // random number generator
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    rng.gen::<f32>()
+fn random_f32(state: &mut u64) -> f32 {
+    // random float32 in [0,1)
+    (random_u32(state) >> 8) as f32 / 16777216.0
 }
 
 fn sample_topp(probabilities: &[f32], topp: f32, /*probindex: &[ProbIndex], */coin: f32) -> i32 {

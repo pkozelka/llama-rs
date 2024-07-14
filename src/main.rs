@@ -32,12 +32,12 @@ fn main() -> anyhow::Result<()> {
     let mut tokenizer = Tokenizer::build_tokenizer(&args.tokenizer_path, transformer.config.vocab_size)?;
 
     // build the Sampler
-    let sampler = Sampler::build_sampler(transformer.config.vocab_size, args.temperature, args.topp, args.rng_seed)?;
+    let mut sampler = Sampler::build_sampler(transformer.config.vocab_size, args.temperature, args.topp, args.rng_seed)?;
 
     // run!
     match args.mode {
         Mode::Generate => {
-            transformer.generate(&mut tokenizer, &sampler, &args.prompt, args.steps)?;
+            transformer.generate(&mut tokenizer, &mut sampler, &args.prompt, args.steps)?;
         }
         Mode::Chat => {
             transformer.chat(&tokenizer, &sampler, &args.prompt, &args.system_prompt, args.steps)?;
