@@ -2,11 +2,14 @@
 //! This is simple rewrite of https://github.com/karpathy/llama2.c/blob/master/run.c
 //! Minimum Rust fanciness used.
 //!
-use clap::Parser;
 use std::path::PathBuf;
 use std::str::FromStr;
-use crate::run::{Sampler, Transformer};
+
+use clap::Parser;
+
+use crate::run::sampler::Sampler;
 use crate::run::tokenizer::Tokenizer;
+use crate::run::Transformer;
 
 mod run;
 
@@ -19,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     args.param_validation_overrides();
 
     // build the Transformer via the model .bin file
-    let transformer = Transformer::build_transformer(&args.checkpoint_path)?;
+    let mut transformer = Transformer::build_transformer(&args.checkpoint_path)?;
     if args.steps == 0 || args.steps > transformer.config.seq_len {
         // override to ~max length
         args.steps = transformer.config.seq_len;

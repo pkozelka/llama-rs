@@ -3,13 +3,14 @@ use std::io::BufReader;
 use std::path::PathBuf;
 
 use byteorder::{LittleEndian, ReadBytesExt};
+use crate::run::sampler::Sampler;
 use crate::run::tokenizer::Tokenizer;
 
 mod math;
 mod utilities;
-
 mod forward;
 pub mod tokenizer;
+pub mod sampler;
 
 /// Transformer model
 
@@ -107,11 +108,11 @@ pub struct Transformer {
     /// buffers for the "wave" of activations in the forward pass
     state: RunState,
     /// some more state needed to properly clean up the memory mapping (sigh)
-    fd: i32,
+    _fd: i32,
     /// memory mapped data pointer
-    data: Vec<f32>,
+    _data: Vec<f32>,
     /// size of the checkpoint file in bytes
-    file_size: i32,
+    _file_size: i32,
 }
 
 impl Config {
@@ -141,64 +142,6 @@ impl Config {
     }
 }
 
-/* translate from C:
-
-    char *empty_prompt = "";
-    if (prompt == NULL) { prompt = empty_prompt; }
-
-    // encode the (string) prompt into tokens sequence
-    int num_prompt_tokens = 0;
-    int* prompt_tokens = (int*)malloc((strlen(prompt)+3) * sizeof(int)); // +3 for '\0', ?BOS, ?EOS
-    encode(tokenizer, prompt, 1, 0, prompt_tokens, &num_prompt_tokens);
-    if (num_prompt_tokens < 1) {
-        fprintf(stderr, "something is wrong, expected at least 1 prompt token\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // start the main loop
-    long start = 0;  // used to time our code, only initialized after first iteration
-    int next;        // will store the next token in the sequence
-    int token = prompt_tokens[0]; // kick off with the first token in the prompt
-    int pos = 0;     // position in the sequence
-    while (pos < steps) {
-
-        // forward the transformer to get logits for the next token
-        float* logits = forward(transformer, token, pos);
-
-        // advance the state machine
-        if (pos < num_prompt_tokens - 1) {
-            // if we are still processing the input prompt, force the next prompt token
-            next = prompt_tokens[pos + 1];
-        } else {
-            // otherwise sample the next token from the logits
-            next = sample(sampler, logits);
-        }
-        pos++;
-
-        // data-dependent terminating condition: the BOS (=1) token delimits sequences
-        if (next == 1) { break; }
-
-        // print the token as string, decode it with the Tokenizer object
-        char* piece = decode(tokenizer, token, next);
-        safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
-        fflush(stdout);
-        token = next;
-
-        // init the timer here because the first iteration can be slower
-        if (start == 0) { start = time_in_ms(); }
-    }
-    printf("\n");
-
-    // report achieved tok/s (pos-1 because the timer starts after first iteration)
-    if (pos > 1) {
-        long end = time_in_ms();
-        fprintf(stderr, "achieved tok/s: %f\n", (pos-1) / (double)(end-start)*1000);
-    }
-
-    free(prompt_tokens);
-}
-
- */
 impl Transformer {
     pub(crate) fn build_transformer(checkpoint_path: &PathBuf) -> anyhow::Result<Self> {
         let mut transformer = Self::default();
@@ -220,66 +163,7 @@ impl Transformer {
         Ok(())
     }
 
-    /* translate from C:
-    void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, char *prompt, int steps) {
-    char *empty_prompt = "";
-    if (prompt == NULL) { prompt = empty_prompt; }
-
-    // encode the (string) prompt into tokens sequence
-    int num_prompt_tokens = 0;
-    int* prompt_tokens = (int*)malloc((strlen(prompt)+3) * sizeof(int)); // +3 for '\0', ?BOS, ?EOS
-    encode(tokenizer, prompt, 1, 0, prompt_tokens, &num_prompt_tokens);
-    if (num_prompt_tokens < 1) {
-        fprintf(stderr, "something is wrong, expected at least 1 prompt token\n");
-        exit(EXIT_FAILURE);
-    }
-
-    // start the main loop
-    long start = 0;  // used to time our code, only initialized after first iteration
-    int next;        // will store the next token in the sequence
-    int token = prompt_tokens[0]; // kick off with the first token in the prompt
-    int pos = 0;     // position in the sequence
-    while (pos < steps) {
-
-        // forward the transformer to get logits for the next token
-        float* logits = forward(transformer, token, pos);
-
-        // advance the state machine
-        if (pos < num_prompt_tokens - 1) {
-            // if we are still processing the input prompt, force the next prompt token
-            next = prompt_tokens[pos + 1];
-        } else {
-            // otherwise sample the next token from the logits
-            next = sample(sampler, logits);
-        }
-        pos++;
-
-        // data-dependent terminating condition: the BOS (=1) token delimits sequences
-        if (next == 1) { break; }
-
-        // print the token as string, decode it with the Tokenizer object
-        char* piece = decode(tokenizer, token, next);
-        safe_printf(piece); // same as printf("%s", piece), but skips "unsafe" bytes
-        fflush(stdout);
-        token = next;
-
-        // init the timer here because the first iteration can be slower
-        if (start == 0) { start = time_in_ms(); }
-    }
-    printf("\n");
-
-    // report achieved tok/s (pos-1 because the timer starts after first iteration)
-    if (pos > 1) {
-        long end = time_in_ms();
-        fprintf(stderr, "achieved tok/s: %f\n", (pos-1) / (double)(end-start)*1000);
-    }
-
-    free(prompt_tokens);
-}
-
-     */
-
-    pub(crate) fn generate(&self, tokenizer: &mut Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
         let num_prompt_tokens = 0;
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
         // if num_prompt_tokens < 1 {
@@ -288,19 +172,19 @@ impl Transformer {
         // }
 
         let mut start = 0;
-        let mut next = 0;
-        let mut token = prompt_tokens[0];
+        let mut token = prompt_tokens[0] as i32;
         let mut pos = 0;
         while pos < steps {
             // forward the transformer to get logits for the next token
-            // let logits = forward(transformer, token, pos);
+            let logits = self.forward(token as usize, pos)?;
             // advance the state machine
+            let next: i32;
             if pos < num_prompt_tokens - 1 {
                 // if we are still processing the input prompt, force the next prompt token
-                next = prompt_tokens[pos + 1];
+                next = prompt_tokens[pos + 1] as i32;
             } else {
                 // otherwise sample the next token from the logits
-                // next = sample(sampler, logits);
+                next = sampler.sample(logits);
             }
             pos += 1;
             // data-dependent terminating condition: the BOS (=1) token delimits sequences
@@ -322,14 +206,14 @@ impl Transformer {
         Ok(())
     }
 
-    pub(crate) fn chat(&self, tokenizer: &Tokenizer, sampler: &Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn chat(&self, _tokenizer: &Tokenizer, _sampler: &Sampler, _cli_user_prompt: &String, _cli_system_prompt: &Option<String>, _steps: usize) -> anyhow::Result<()> {
         todo!()
     }
 }
 
 
 impl TransformerWeights {
-    fn _memory_map_weights(&mut self, config: &Config, ptr: &mut Vec<f32>, shared_weights: i32) {
+    fn _memory_map_weights(&mut self, _config: &Config, _ptr: &mut Vec<f32>, _shared_weights: i32) {
         unimplemented!("memory mapping is not easily available in Rust, so we read the weights into memory")
     }
 
@@ -404,38 +288,4 @@ impl RunState {
     }
 
     // `RunState::free_run_state` is implicit by `drop`
-}
-
-
-// ----------------------------------------------------------------------------
-// The Sampler, which takes logits and returns a sampled token
-// sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
-
-/*
-*/
-
-pub struct ProbIndex {
-    prob: f32,
-    index: i32,
-}
-
-pub struct Sampler {
-    /// the vocabulary size
-    vocab_size: usize,
-    /// buffer used in top-p sampling
-    probindex: Box<ProbIndex>,
-    /// the temperature of the sampling
-    temperature: f32,
-    /// the top-p value
-    topp: f32,
-    /// the random number generator seed
-    rng_seed: u64,
-}
-
-impl Sampler {
-    pub(crate) fn build_sampler(vocab_size: usize, temperature: f32, topp: f32, rng_seed: u64) -> anyhow::Result<Self> {
-        let probindex = Box::new(ProbIndex { prob: 0.0, index: 0 });
-        Ok(Self { vocab_size, probindex, temperature, topp, rng_seed })
-        //TODO!!!
-    }
 }
