@@ -164,7 +164,6 @@ impl Transformer {
     }
 
     pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &mut Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
-        let num_prompt_tokens = 0;
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
         // if num_prompt_tokens < 1 {
         //     eprintln!("something is wrong, expected at least 1 prompt token");
@@ -181,7 +180,7 @@ impl Transformer {
             log::trace!("logits: {:?}", logits.len());
             // advance the state machine
             let next: i32;
-            if pos + 1 < num_prompt_tokens {
+            if pos + 1 < prompt_tokens.len() {
                 // if we are still processing the input prompt, force the next prompt token
                 next = prompt_tokens[pos + 1] as i32;
             } else {
