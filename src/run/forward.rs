@@ -2,8 +2,8 @@ use crate::run::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
 use crate::run::Transformer;
 
 impl Transformer {
-    pub fn forward<'a>(&'a mut self, token: usize, pos: usize) -> anyhow::Result<&'a [f32]> {
-        log::debug!("forward(token={}, pos={})", token, pos);
+    pub fn forward(&mut self, token: usize, pos: usize) -> anyhow::Result<()> {
+        eprintln!("forward(token={}, pos={})", token, pos);
         let p = &self.config;
         let w = &self.weights;
         let s = &mut self.state;
@@ -16,7 +16,7 @@ impl Transformer {
         // copy the token embedding into x
         let content_row = &w.token_embedding_table[token * dim..];
         let content_row = &content_row[..dim];
-        *x = content_row.to_vec();
+        x.copy_from_slice(content_row);
 
         // forward all the layers
         for l in 0..p.n_layers {
@@ -143,6 +143,6 @@ impl Transformer {
 
         // classifier into logits
         matmul(&mut s.logits, x, &w.wcls, p.dim, p.vocab_size);
-        Ok(s.logits.as_slice())
+        Ok(())
     }
 }

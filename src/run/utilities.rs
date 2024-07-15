@@ -19,10 +19,6 @@ pub fn safe_printf(piece: &str) {
     }
     print!("{}", piece);
     let _ = std::io::stdout().flush();
-    if log::log_enabled!(log::Level::Debug) {
-        println!();
-        let _ = std::io::stderr().flush();
-    }
 }
 
 pub fn time_in_ms() -> i64 {

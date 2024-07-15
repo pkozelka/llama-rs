@@ -176,17 +176,15 @@ impl Transformer {
         while pos < steps {
             // log::debug!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
-            let logits = self.forward(token as usize, pos)?;
-            log::trace!("logits: {:?}", logits.len());
+            self.forward(token as usize, pos)?;
             // advance the state machine
-            let next: i32;
-            if pos + 1 < prompt_tokens.len() {
+            let next = if pos + 1 < prompt_tokens.len() {
                 // if we are still processing the input prompt, force the next prompt token
-                next = prompt_tokens[pos + 1] as i32;
+                prompt_tokens[pos + 1] as i32
             } else {
                 // otherwise sample the next token from the logits
-                next = sampler.sample(logits);
-            }
+                sampler.sample(&mut self.state.logits)
+            };
             pos += 1;
             // data-dependent terminating condition: the BOS (=1) token delimits sequences
             if next == 1 { break; }

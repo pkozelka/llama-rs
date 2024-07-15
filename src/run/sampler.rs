@@ -4,6 +4,7 @@
 
 use crate::run::math::softmax;
 
+#[derive(Debug)]
 pub struct ProbIndex {
     prob: f32,
     index: i32,
@@ -30,19 +31,23 @@ impl Sampler {
         Ok(Self { vocab_size, _probindex: probindex, temperature, topp, rng_seed })
     }
 
-    pub fn sample(&mut self, logits: &[f32]) -> i32 {
+    pub fn sample(&mut self, logits: &mut [f32]) -> i32 {
+        // eprintln!("temperature: {}, topp: {}", self.temperature, self.topp);
+        // print first 20 logits
+        // eprintln!("sample::logits.len={}", logits.len());
+        logits.iter().take(20).enumerate().for_each(|(i,l)| eprintln!("logit[{i}]={l:.6}"));
+
         // sample the token given the logits and some hyperparameters
         if self.temperature == 0.0 {
             // greedy argmax sampling: take the token with the highest probability
             sample_argmax(logits)
         } else {
             // apply the temperature to the logits
-            let mut logits = logits.to_vec();
             for q in 0..self.vocab_size {
                 logits[q] /= self.temperature;
             }
             // apply softmax to the logits to get the probabilities for next token
-            softmax(&mut logits);
+            softmax(logits);
             // flip a (float) coin (this is our source of entropy for sampling)
             let coin = random_f32(&mut self.rng_seed);
             // log::debug!("sample::coin: {}", coin);
@@ -88,12 +93,16 @@ fn sample_topp(probabilities: &[f32], topp: f32, /*probindex: &[ProbIndex], */co
         }
     }
     probindex.sort_by(|a, b| b.prob.partial_cmp(&a.prob).unwrap());
-    let n0 = probindex.len();
+
+    // log first 10 of probindex
+    eprintln!("sample_topp::probindex.len={} probabilities.len={} cutoff={cutoff:.6}", probindex.len(), probabilities.len());
+    // probindex.iter().take(10).for_each(|pi| eprintln!("* {pi:?}"));
+
 
     // truncate the list where cumulative probability exceeds topp
     let mut cumulative_prob = 0.0;
-    let mut last_idx = n0 - 1; // in case of rounding errors consider all elements
-    for i in 0..n0 {
+    let mut last_idx = probindex.len() - 1; // in case of rounding errors consider all elements
+    for i in 0..probindex.len() {
         cumulative_prob += probindex[i].prob;
         if cumulative_prob > topp {
             last_idx = i;
