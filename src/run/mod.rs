@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
-
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::run::sampler::Sampler;
@@ -84,9 +83,9 @@ struct RunState {
     /// query (dim,)
     q: Vec<f32>,
     /// key (dim,)
-    k: Vec<f32>,
+    k_index: usize,
     /// value (dim,)
-    v: Vec<f32>,
+    v_index: usize,
     /// buffer for scores/attention values (n_heads, seq_len)
     att: Vec<f32>,
     /// output logits
@@ -278,6 +277,8 @@ impl RunState {
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;
+        let key_cache = vec![0.0; config.n_layers * config.seq_len * kv_dim];
+        let value_cache = vec![0.0; config.n_layers * config.seq_len * kv_dim];
         RunState {
             x: vec![0.0; dim],
             xb: vec![0.0; dim],
@@ -285,12 +286,12 @@ impl RunState {
             hb: vec![0.0; hidden_dim],
             hb2: vec![0.0; hidden_dim],
             q: vec![0.0; dim],
-            k: vec![0.0; dim],
+            k_index: 0,
+            v_index: 0,
             att: vec![0.0; config.n_heads * config.seq_len],
             logits: vec![0.0; config.vocab_size],
-            v: vec![0.0; dim],
-            key_cache: vec![0.0; config.n_layers * config.seq_len * kv_dim],
-            value_cache: vec![0.0; config.n_layers * config.seq_len * kv_dim],
+            key_cache: key_cache,
+            value_cache: value_cache,
         }
     }
 

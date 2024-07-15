@@ -11,7 +11,6 @@ impl Transformer {
         let dim = p.dim;
         let kv_dim = (p.dim * p.n_kv_heads) / p.n_heads;
         let kv_mul = p.n_heads / p.n_kv_heads;
-        let hidden_dim = p.hidden_dim;
         let head_size = dim / p.n_heads;
 
         // copy the token embedding into x
@@ -28,13 +27,16 @@ impl Transformer {
 
             // key and value point to the kv cache
             let loff = l * p.seq_len * kv_dim; // kv cache layer offset for convenience
-            s.k = s.key_cache[loff + pos * kv_dim..].to_vec(); //TODO: avoid this copy
-            s.v = s.value_cache[loff + pos * kv_dim..].to_vec(); //TODO: avoid this copy
+            s.k_index = loff + pos * kv_dim;
+            s.v_index = loff + pos * kv_dim;
 
             // qkv matmuls for this position
             matmul(&mut s.q, &s.xb, &w.wq[l * dim * dim..], dim, dim);
-            matmul(&mut s.k, &s.xb, &w.wk[l * dim * kv_dim..], dim, kv_dim);
-            matmul(&mut s.v, &s.xb, &w.wv[l * dim * kv_dim..], dim, kv_dim);
+            let k = &mut s.key_cache[s.k_index..];
+            matmul(k, &s.xb, &w.wk[l * dim * kv_dim..], dim, kv_dim);
+            let v = &mut s.value_cache[s.v_index..];
+            matmul(v, &s.xb, &w.wv[l * dim * kv_dim..], dim, kv_dim);
+            log::debug!("L{l:02} B) (q,k,v)[0] = ({:1.6},{:1.6},{:1.6})", s.q[0], k[0], v[0]);
 
             // RoPE relative positional encoding: complex-valued rotate q and k in each head
             for i in (0..dim).step_by(2) {
@@ -45,7 +47,12 @@ impl Transformer {
                 let fci = val.sin();
                 let rotn = if i < kv_dim { 2 } else { 1 }; // how many vectors? 2 = q & k, 1 = q only
                 for v in 0..rotn {
-                    let vec = if v == 0 { &mut s.q } else { &mut s.k };  // the vector to rotate (query or key)
+                    let vec = if v == 0 {
+                        s.q.as_mut_slice()
+                    } else {
+                        // k
+                        &mut s.key_cache[s.k_index..]
+                    };  // the vector to rotate (query or key)
                     let v0 = vec[i];
                     let v1 = vec[i + 1];
                     vec[i] = v0 * fcr - v1 * fci;
@@ -108,6 +115,7 @@ impl Transformer {
 
             // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
             // first calculate self.w1(x) and self.w3(x)
+            let hidden_dim = p.hidden_dim;
             matmul(&mut s.hb, &s.xb, &w.w1[l * dim * hidden_dim..], dim, hidden_dim);
             matmul(&mut s.hb2, &s.xb, &w.w3[l * dim * hidden_dim..], dim, hidden_dim);
 
