@@ -12,8 +12,6 @@ pub struct Tokenizer {
     vocab_scores: Vec<f32>,
     /// the sorted vocabulary
     sorted_vocab: Vec<TokenIndex>,
-    /// the size of the vocabulary
-    vocab_size: usize,
     /// the maximum token length
     max_token_length: usize,
     /// the byte pieces
@@ -34,7 +32,6 @@ impl Tokenizer {
             vocab: Vec::with_capacity(vocab_size),
             vocab_scores: Vec::with_capacity(vocab_size),
             sorted_vocab: Vec::new(),
-            vocab_size,
             max_token_length: 0,
             byte_pieces: vec![0; 256 * 2],
         };
@@ -74,9 +71,8 @@ impl Tokenizer {
 
         // lazily malloc and sort the vocabulary
         if self.sorted_vocab.is_empty() {
-            let mut sorted_vocab = Vec::with_capacity(self.vocab_size);
-            // log::debug!("encode: vocab_size={}", self.vocab_size);
-            for id in 0..self.vocab_size {
+            let mut sorted_vocab = Vec::with_capacity(self.vocab.len());
+            for id in 0..self.vocab.len() {
                 let token_index = TokenIndex { str: self.vocab[id].clone(), id };
                 // log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
 
