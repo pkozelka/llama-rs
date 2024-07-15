@@ -13,6 +13,10 @@ pub fn safe_printf(piece: &str) {
             return; // bad byte, don't print it
         }
     }
+    if piece == "<0x0A>" {
+        println!();
+        return;
+    }
     print!("{}", piece);
     let _ = std::io::stdout().flush();
     if log::log_enabled!(log::Level::Debug) {
