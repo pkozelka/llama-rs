@@ -50,7 +50,7 @@ impl Sampler {
             softmax(logits);
             // flip a (float) coin (this is our source of entropy for sampling)
             let coin = random_f32(&mut self.rng_seed);
-            // log::debug!("sample::coin: {}", coin);
+            // eprintln!("sample::coin: {:.6}", coin);
             // we sample from this distribution to get the next token
             if self.topp <= 0.0 || self.topp >= 1.0 {
                 // simply sample from the predicted probability distribution

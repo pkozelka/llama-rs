@@ -155,7 +155,7 @@ impl Transformer {
         let mut reader = BufReader::new(file);
         // read in the config header from reader
         self.config = Config::read_config(&mut reader)?;
-        log::debug!("config: {:?}", self.config);
+        eprintln!("config: {:?}", self.config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
         // INSTEAD: we just read the weights, as mmap is not easily available in Rust
@@ -165,16 +165,13 @@ impl Transformer {
 
     pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &mut Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
-        // if num_prompt_tokens < 1 {
-        //     eprintln!("something is wrong, expected at least 1 prompt token");
-        //     return Err(anyhow::anyhow!("something is wrong, expected at least 1 prompt token"));
-        // }
+        prompt_tokens.iter().enumerate().for_each(|(i, t)| eprintln!("prompt_tokens[{i}]={t}"));
 
         let mut start = 0;
         let mut token = prompt_tokens[0] as i32;
         let mut pos = 0;
         while pos < steps {
-            // log::debug!("generate: pos: {}", pos);
+            // eprintln!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
             self.forward(token as usize, pos)?;
             // advance the state machine
@@ -190,7 +187,7 @@ impl Transformer {
             if next == 1 { break; }
             // print the token as string, decode it with the Tokenizer object
             let piece = tokenizer.decode(token, next);
-            log::debug!("token: {} next: {} piece: {}", token, next, piece);
+            eprintln!("pos:{pos:3} token: {token:5} next: {next:5} piece: '{piece}'");
             utilities::safe_printf(&piece); // same as printf("%s", piece), but skips "unsafe" bytes
             token = next;
             // init the timer here because the first iteration can be slower
@@ -239,7 +236,7 @@ impl TransformerWeights {
 
         let rms_final_weight = utilities::read_f32_table(reader, 1, p.dim)?;
 
-        // log::debug!("shared_weights: {}", p.shared_weights);
+        // eprintln!("shared_weights: {}", p.shared_weights);
         let wcls = if p.shared_weights {
             token_embedding_table.clone()
         } else {
@@ -247,7 +244,7 @@ impl TransformerWeights {
             reader.seek_relative((p.seq_len * head_size / 2) as i64)?; // skip what used to be freq_cis_imag (for RoPE)
             utilities::read_f32_table(reader, p.vocab_size, p.dim)?
         };
-        // log::debug!("wcls.len={}", wcls.len());
+        // eprintln!("wcls.len={}", wcls.len());
 
         // assign the weights
         self.token_embedding_table = token_embedding_table;
@@ -270,7 +267,7 @@ impl TransformerWeights {
 impl RunState {
     /// constructor
     fn malloc_run_state(config: &Config) -> RunState {
-        // log::debug!("malloc_run_state(config={:?})", config);
+        // eprintln!("malloc_run_state(config={:?})", config);
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;

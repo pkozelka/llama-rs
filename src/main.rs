@@ -17,7 +17,6 @@ fn main() -> anyhow::Result<()> {
     env_logger::builder()
         // .filter_level(log::LevelFilter::Debug)
         .init();
-    log::info!("Welcome to LLAMA2-RS");
     let mut args = Cli::parse();
     args.param_validation_overrides();
 
