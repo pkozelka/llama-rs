@@ -142,7 +142,7 @@ impl Tokenizer {
 
         // add_dummy_prefix is true by default
         // so prepend a dummy prefix token to the input string, but only if text != ""
-        if text.is_empty() {
+        if !text.is_empty() {
             if let Some(dummy_prefix) = self.str_lookup(" ") {
                 tokens.push(dummy_prefix)
             };
