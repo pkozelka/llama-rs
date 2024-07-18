@@ -11,6 +11,8 @@ Written from scratch, code is typically designed very differently in Rust than i
 
 I hope to be able to refactor this project into a beauty ... soon.
 
+## Contributing
+
 Feel free to read, fork, send PR or issues and discuss anything relevant.
 
 ## Usage
@@ -43,6 +45,11 @@ There reasons include:
 ## Performance comparison
 
 _Note: not very precise measurement, as it currently includes the build phase; but second invocation gives some idea_
+
+I am recording the performance here in order to keep track of the progress of code improvements.
+Now the main culprit seems to be the huge set of debug output that is generated.
+Perhaps having that behind a feature flag would be a usable approach for more accurate comparisons.
+
 Rust debug version:
 ```
 $ time make run
