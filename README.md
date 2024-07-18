@@ -40,3 +40,36 @@ There reasons include:
 - the code is not well-adjusted to Rust's strengths - doing so might be the next steps here
 - there is a lot of debug output that was used to track the differences during initial development; this will gradually go away
 
+## Performance comparison
+
+_Note: not very precise measurement, as it currently includes the build phase; but second invocation gives some idea_
+Rust debug version:
+```
+$ time make run
+...
+real    1m42,896s
+user    1m29,443s
+sys     0m13,332s
+```
+
+Rust release version:
+```
+$ time make generate 
+...
+real    0m37,726s
+user    0m24,268s
+sys     0m13,442s
+```
+
+C version:
+```
+$ time make c-run
+...
+achieved tok/s: 23.348694
+9.79user 0.02system 0:09.83elapsed 99%CPU (0avgtext+0avgdata 174432maxresident)k
+0inputs+0outputs (0major+5119minor)pagefaults 0swaps
+
+real    0m10,381s
+user    0m10,317s
+sys     0m0,056s
+```

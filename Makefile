@@ -20,6 +20,11 @@ debug: build data/stories42M.bin
 run: build data/stories42M.bin
 	RUST_LOG=info $(LLAMA2_RS) data/stories42M.bin -t 0.8 -n 256 -i "One day, Lily met a Shoggoth" -s 100 2>/dev/null
 
+# run my code in release mode, just for speed comparison
+generate: data/stories42M.bin
+	cargo build --release
+	RUST_LOG=info target/release/llama2-rs data/stories42M.bin -t 0.8 -n 256 -i "One day, Lily met a Shoggoth" -s 100 2>/dev/null
+
 # run original code for comparison, just a few steps
 c-debug:
 	cd ../llama2.c \
@@ -28,9 +33,9 @@ c-debug:
 
 # run original code for comparison
 c-run:
-	cd ../llama2.c \
-	&& make \
-	&& ./run stories42M.bin -t 0.8 -i "One day, Lily met a Shoggoth" -s 100 -n 256
+	mkdir -p target
+	gcc -O3 -o target/llama2_c ../llama2.c/run.c -lm
+	target/llama2_c data/stories42M.bin -z ../llama2.c/tokenizer.bin -t 0.8 -i "One day, Lily met a Shoggoth" -s 100 -n 256
 
 data/stories15M.bin:
 	mkdir -p data
