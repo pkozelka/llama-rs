@@ -208,6 +208,8 @@ impl Transformer {
 
 
 impl TransformerWeights {
+
+    /// TODO: consider using this for mmap stuff: https://docs.rs/memmap/latest/memmap/struct.Mmap.html
     fn _memory_map_weights(&mut self, _config: &Config, _ptr: &mut Vec<f32>, _shared_weights: i32) {
         unimplemented!("memory mapping is not easily available in Rust, so we read the weights into memory")
     }
