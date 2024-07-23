@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::Path;
+
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::run::sampler::Sampler;
@@ -11,6 +12,8 @@ mod utilities;
 mod forward;
 pub mod tokenizer;
 pub mod sampler;
+
+mod chat;
 
 /// Transformer model
 
@@ -143,14 +146,14 @@ impl Config {
 }
 
 impl Transformer {
-    pub(crate) fn build_transformer(checkpoint_path: &PathBuf) -> anyhow::Result<Self> {
+    pub(crate) fn build_transformer(checkpoint_path: &Path) -> anyhow::Result<Self> {
         let mut transformer = Self::default();
         transformer.read_checkpoint(checkpoint_path)?;
         transformer.state = RunState::malloc_run_state(&transformer.config);
         Ok(transformer)
     }
 
-    fn read_checkpoint(&mut self, checkpoint_path: &PathBuf) -> anyhow::Result<()> {
+    fn read_checkpoint(&mut self, checkpoint_path: &Path) -> anyhow::Result<()> {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
@@ -200,10 +203,6 @@ impl Transformer {
             eprintln!("achieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
         }
         Ok(())
-    }
-
-    pub(crate) fn chat(&self, _tokenizer: &Tokenizer, _sampler: &Sampler, _cli_user_prompt: &String, _cli_system_prompt: &Option<String>, _steps: usize) -> anyhow::Result<()> {
-        todo!()
     }
 }
 

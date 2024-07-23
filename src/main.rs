@@ -39,7 +39,7 @@ fn main() -> anyhow::Result<()> {
             transformer.generate(&mut tokenizer, &mut sampler, &args.prompt, args.steps)?;
         }
         Mode::Chat => {
-            transformer.chat(&tokenizer, &sampler, &args.prompt, &args.system_prompt, args.steps)?;
+            transformer.chat(&mut tokenizer, &mut sampler, &args.prompt, &args.system_prompt, args.steps)?;
         }
     }
 
