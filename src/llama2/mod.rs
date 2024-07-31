@@ -200,7 +200,7 @@ impl Transformer {
         // report achieved tok/s (pos-1 because the timer starts after first iteration)
         if pos > 1 {
             let end = utilities::time_in_ms();
-            dirty_dbg!("achieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
+            eprintln!("\nachieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
         }
         Ok(())
     }
