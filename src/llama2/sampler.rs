@@ -68,7 +68,7 @@ fn random_u32(state: &mut u64) -> u32 {
     *state = *state ^ (*state >> 12);
     *state ^= *state << 25;
     *state ^= *state >> 27;
-    (unsafe { state.unchecked_mul(0x2545F4914F6CDD1D_u64)} >> 32) as u32
+    (state.wrapping_mul(0x2545F4914F6CDD1D_u64) >> 32) as u32
 }
 
 fn random_f32(state: &mut u64) -> f32 {
