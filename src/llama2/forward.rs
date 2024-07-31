@@ -1,9 +1,10 @@
+use llama_rs::dirty_dbg;
 use crate::llama2::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
 use crate::llama2::Transformer;
 
 impl Transformer {
     pub fn forward(&mut self, token: usize, pos: usize) -> anyhow::Result<()> {
-        eprintln!("forward(token={}, pos={})", token, pos);
+        dirty_dbg!("forward(token={}, pos={})", token, pos);
         let p = &self.config;
         let w = &self.weights;
         let s = &mut self.state;
@@ -25,7 +26,7 @@ impl Transformer {
             let weight = &w.rms_att_weight[l * dim..];
             let weight = &weight[..dim];
             rmsnorm(&mut s.xb, x, weight);
-            eprintln!("L{l:02} A) xb[0] = {:1.6}", s.xb[0]);
+            dirty_dbg!("L{l:02} A) xb[0] = {:1.6}", s.xb[0]);
 
             // key and value point to the kv cache
             let loff = l * p.seq_len * kv_dim; // kv cache layer offset for convenience
@@ -38,7 +39,7 @@ impl Transformer {
             matmul(k, &s.xb, &w.wk[l * dim * kv_dim..], dim, kv_dim);
             let v = &mut s.value_cache[s.v_index..];
             matmul(v, &s.xb, &w.wv[l * dim * kv_dim..], dim, kv_dim);
-            eprintln!("L{l:02} B) (q,k,v)[0] = ({:1.6},{:1.6},{:1.6})", s.q[0], k[0], v[0]);
+            dirty_dbg!("L{l:02} B) (q,k,v)[0] = ({:1.6},{:1.6},{:1.6})", s.q[0], k[0], v[0]);
 
             // RoPE relative positional encoding: complex-valued rotate q and k in each head
             for i in (0..dim).step_by(2) {
@@ -61,21 +62,21 @@ impl Transformer {
                     vec[i + 1] = v0 * fci + v1 * fcr;
                 }
             }
-            eprintln!("L{l:02} C) s.q[0..4] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.q[0], s.q[1], s.q[2], s.q[3]);
+            dirty_dbg!("L{l:02} C) s.q[0..4] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.q[0], s.q[1], s.q[2], s.q[3]);
 
             // multihead attention. iterate over all heads
             // #pragma omp parallel for private(h) //TODO: parallelize this with rayon
             for h in 0..p.n_heads {
                 // get the query vector for this head
                 let q = &s.q[h * head_size..];
-                eprintln!("L{l:02}/h{h} Ca) q[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", q[0], q[1], q[2], q[3]);
+                dirty_dbg!("L{l:02}/h{h} Ca) q[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", q[0], q[1], q[2], q[3]);
                 // attention scores for this head
                 let att = &mut s.att[h * p.seq_len..];
                 // iterate over all timesteps, including the current one
                 for t in 0..=pos {
                     // get the key vector for this head and at this timestep
                     let k = &s.key_cache[loff + t * kv_dim + (h / kv_mul) * head_size..];
-                    eprintln!("L{l:02}/h{h}/t{t} CbA) k[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", k[0], k[1], k[2], k[3]);
+                    dirty_dbg!("L{l:02}/h{h}/t{t} CbA) k[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", k[0], k[1], k[2], k[3]);
                     // calculate the attention score as the dot product of q and k
                     let mut score = 0.0;
                     for i in 0..head_size {
@@ -85,7 +86,7 @@ impl Transformer {
                     // save the score to the attention buffer
                     att[t] = score;
                 }
-                eprintln!("L{l:02}/h{h} Cc) att[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", att[0], att[1], att[2], att[3]);
+                dirty_dbg!("L{l:02}/h{h} Cc) att[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", att[0], att[1], att[2], att[3]);
 
                 // softmax the scores to get attention weights, from 0..pos inclusively
                 let pos = pos as f32;
@@ -107,29 +108,29 @@ impl Transformer {
                     }
                 }
             }
-            eprintln!("L{l:02} D) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
+            dirty_dbg!("L{l:02} D) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
 
             // final matmul to get the output of the attention
             matmul(&mut s.xb2, &s.xb, &w.wo[l * dim * dim..], dim, dim);
-            eprintln!("L{l:02} E) xb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb2[0], s.xb2[1], s.xb2[2], s.xb2[3]);
+            dirty_dbg!("L{l:02} E) xb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb2[0], s.xb2[1], s.xb2[2], s.xb2[3]);
 
             // residual connection back into x
             for i in 0..dim {
                 x[i] += s.xb2[i];
             }
-            eprintln!("L{l:02} F) x[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", x[0], x[1], x[2], x[3]);
+            dirty_dbg!("L{l:02} F) x[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", x[0], x[1], x[2], x[3]);
 
             // ffn rmsnorm
             rmsnorm(&mut s.xb, x, &w.rms_ffn_weight[l * dim..]);
-            eprintln!("L{l:02} G) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
+            dirty_dbg!("L{l:02} G) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
 
             // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
             // first calculate self.w1(x) and self.w3(x)
             let hidden_dim = p.hidden_dim;
             matmul(&mut s.hb, &s.xb, &w.w1[l * dim * hidden_dim..], dim, hidden_dim);
-            eprintln!("L{l:02} H) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
+            dirty_dbg!("L{l:02} H) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
             matmul(&mut s.hb2, &s.xb, &w.w3[l * dim * hidden_dim..], dim, hidden_dim);
-            eprintln!("L{l:02} I) hb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb2[0], s.hb2[1], s.hb2[2], s.hb2[3]);
+            dirty_dbg!("L{l:02} I) hb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb2[0], s.hb2[1], s.hb2[2], s.hb2[3]);
 
             // SwiGLU non-linearity
             for i in 0..hidden_dim {
@@ -140,23 +141,23 @@ impl Transformer {
                 val *= s.hb2[i];
                 s.hb[i] = val;
             }
-            eprintln!("L{l:02} J) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
+            dirty_dbg!("L{l:02} J) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
 
             // final matmul to get the output of the ffn
             matmul(&mut s.xb, &s.hb, &w.w2[l * dim * hidden_dim..], hidden_dim, dim);
-            eprintln!("L{l:02} K) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
+            dirty_dbg!("L{l:02} K) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
 
             // residual connection
             for i in 0..dim {
                 x[i] += s.xb[i];
             }
 
-            eprintln!("L{l:02} Z) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
+            dirty_dbg!("L{l:02} Z) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
         }
 
         // final rmsnorm
         rmsnorm_inplace(x, &w.rms_final_weight);
-        eprintln!("Final_A) x[0,1,2,3,4] = ({:1.6},{:1.6},{:1.6},{:1.6},{:1.6})", x[0], x[1], x[2], x[3], x[4]);
+        dirty_dbg!("Final_A) x[0,1,2,3,4] = ({:1.6},{:1.6},{:1.6},{:1.6},{:1.6})", x[0], x[1], x[2], x[3], x[4]);
 
         // classifier into logits
         matmul(&mut s.logits, x, &w.wcls, p.dim, p.vocab_size);

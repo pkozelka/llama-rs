@@ -2,6 +2,7 @@
 //! The Sampler, which takes logits and returns a sampled token
 //! sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
 
+use llama_rs::dirty_dbg;
 use crate::llama2::math::softmax;
 
 #[derive(Debug)]
@@ -32,10 +33,10 @@ impl Sampler {
     }
 
     pub fn sample(&mut self, logits: &mut [f32]) -> i32 {
-        // eprintln!("temperature: {}, topp: {}", self.temperature, self.topp);
+        // log_debug!("temperature: {}, topp: {}", self.temperature, self.topp);
         // print first 20 logits
-        // eprintln!("sample::logits.len={}", logits.len());
-        logits.iter().take(20).enumerate().for_each(|(i,l)| eprintln!("logit[{i}]={l:.6}"));
+        // log_debug!("sample::logits.len={}", logits.len());
+        logits.iter().take(20).enumerate().for_each(|(i, l)| dirty_dbg!("logit[{i}]={l:.6}"));
 
         // sample the token given the logits and some hyperparameters
         if self.temperature == 0.0 {
@@ -50,7 +51,7 @@ impl Sampler {
             softmax(logits);
             // flip a (float) coin (this is our source of entropy for sampling)
             let coin = random_f32(&mut self.rng_seed);
-            // eprintln!("sample::coin: {:.6}", coin);
+            // log_debug!("sample::coin: {:.6}", coin);
             // we sample from this distribution to get the next token
             if self.topp <= 0.0 || self.topp >= 1.0 {
                 // simply sample from the predicted probability distribution
@@ -95,8 +96,8 @@ fn sample_topp(probabilities: &[f32], topp: f32, /*probindex: &[ProbIndex], */co
     probindex.sort_by(|a, b| b.prob.partial_cmp(&a.prob).unwrap());
 
     // log first 10 of probindex
-    eprintln!("sample_topp::probindex.len={} probabilities.len={} cutoff={cutoff:.6}", probindex.len(), probabilities.len());
-    // probindex.iter().take(10).for_each(|pi| eprintln!("* {pi:?}"));
+    dirty_dbg!("sample_topp::probindex.len={} probabilities.len={} cutoff={cutoff:.6}", probindex.len(), probabilities.len());
+    // probindex.iter().take(10).for_each(|pi| log_debug!("* {pi:?}"));
 
 
     // truncate the list where cumulative probability exceeds topp
@@ -121,7 +122,6 @@ fn sample_topp(probabilities: &[f32], topp: f32, /*probindex: &[ProbIndex], */co
     }
     probindex[last_idx as usize].index // in case of rounding errors
 }
-
 
 
 fn sample_argmax(probabilities: &[f32]) -> i32 {

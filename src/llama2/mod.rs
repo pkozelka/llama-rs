@@ -3,7 +3,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 use byteorder::{LittleEndian, ReadBytesExt};
-
+use llama_rs::dirty_dbg;
 use crate::llama2::sampler::Sampler;
 use crate::llama2::tokenizer::Tokenizer;
 
@@ -158,7 +158,7 @@ impl Transformer {
         let mut reader = BufReader::new(file);
         // read in the config header from reader
         self.config = Config::read_config(&mut reader)?;
-        eprintln!("config: {:?}", self.config);
+        dirty_dbg!("config: {:?}", self.config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
         // INSTEAD: we just read the weights, as mmap is not easily available in Rust
@@ -168,13 +168,13 @@ impl Transformer {
 
     pub(crate) fn generate(&mut self, tokenizer: &mut Tokenizer, sampler: &mut Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
-        prompt_tokens.iter().enumerate().for_each(|(i, t)| eprintln!("prompt_tokens[{i}]={t}"));
+        prompt_tokens.iter().enumerate().for_each(|(i, t)| dirty_dbg!("prompt_tokens[{i}]={t}"));
 
         let mut start = 0;
         let mut token = prompt_tokens[0] as i32;
         let mut pos = 0;
         while pos < steps {
-            // eprintln!("generate: pos: {}", pos);
+            // log_debug!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
             self.forward(token as usize, pos)?;
             // advance the state machine
@@ -190,7 +190,7 @@ impl Transformer {
             if next == 1 { break; }
             // print the token as string, decode it with the Tokenizer object
             let piece = tokenizer.decode(token, next);
-            eprintln!("pos:{pos:3} token: {token:5} next: {next:5} piece: '{piece}'");
+            dirty_dbg!("pos:{pos:3} token: {token:5} next: {next:5} piece: '{piece}'");
             utilities::safe_printf(&piece); // same as printf("%s", piece), but skips "unsafe" bytes
             token = next;
             // init the timer here because the first iteration can be slower
@@ -200,7 +200,7 @@ impl Transformer {
         // report achieved tok/s (pos-1 because the timer starts after first iteration)
         if pos > 1 {
             let end = utilities::time_in_ms();
-            eprintln!("achieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
+            dirty_dbg!("achieved tok/s: {}", (pos - 1) as f64 / (end - start) as f64 * 1000.0);
         }
         Ok(())
     }
@@ -237,7 +237,7 @@ impl TransformerWeights {
 
         let rms_final_weight = utilities::read_f32_table(reader, 1, p.dim)?;
 
-        // eprintln!("shared_weights: {}", p.shared_weights);
+        // log_debug!("shared_weights: {}", p.shared_weights);
         let wcls = if p.shared_weights {
             token_embedding_table.clone()
         } else {
@@ -245,7 +245,7 @@ impl TransformerWeights {
             reader.seek_relative((p.seq_len * head_size / 2) as i64)?; // skip what used to be freq_cis_imag (for RoPE)
             utilities::read_f32_table(reader, p.vocab_size, p.dim)?
         };
-        // eprintln!("wcls.len={}", wcls.len());
+        // log_debug!("wcls.len={}", wcls.len());
 
         // assign the weights
         self.token_embedding_table = token_embedding_table;
@@ -268,7 +268,7 @@ impl TransformerWeights {
 impl RunState {
     /// constructor
     fn malloc_run_state(config: &Config) -> RunState {
-        // eprintln!("malloc_run_state(config={:?})", config);
+        // log_debug!("malloc_run_state(config={:?})", config);
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;

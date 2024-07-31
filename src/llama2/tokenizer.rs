@@ -4,6 +4,7 @@
 use std::io::Read;
 use std::path::PathBuf;
 use byteorder::{LittleEndian, ReadBytesExt};
+use llama_rs::dirty_dbg;
 
 pub struct Tokenizer {
     /// the vocabulary of the tokenizer
@@ -62,7 +63,7 @@ impl Tokenizer {
     }
 
     pub fn encode(&mut self, text: &str, bos: bool, eos: bool) -> anyhow::Result<Vec<usize>> {
-        eprintln!("encode(text='{text}',\n  bos={bos}, eos={eos})");
+        dirty_dbg!("encode(text='{text}',\n  bos={bos}, eos={eos})");
         // encode the string text (input) into an upper-bound preallocated tokens[] array
         // bos != 0 means prepend the BOS token (=1), eos != 0 means append the EOS token (=2)
         if text.is_empty() {
@@ -83,7 +84,7 @@ impl Tokenizer {
         }
 
         let mut tokens = self.process_unicode_text(text, bos);
-        tokens.iter().enumerate().for_each(|(i, t)| eprintln!("tokens[{i}]={t} '{}'", self.vocab[*t]));
+        tokens.iter().enumerate().for_each(|(i, t)| dirty_dbg!("tokens[{i}]={t} '{}'", self.vocab[*t]));
 
         // merge the best consecutive pair each iteration, according the scores in vocab_scores
         loop {
@@ -116,7 +117,7 @@ impl Tokenizer {
             // merge the consecutive pair (best_idx, best_idx+1) into new token best_id
             tokens[best_idx] = best_id;
             // delete token at position best_idx+1, shift the entire sequence back 1
-            eprintln!("removing token: {}", tokens[best_idx + 1]);
+            dirty_dbg!("removing token: {}", tokens[best_idx + 1]);
             tokens.remove(best_idx + 1);
         }
 
