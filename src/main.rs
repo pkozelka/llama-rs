@@ -7,11 +7,11 @@ use std::str::FromStr;
 
 use clap::Parser;
 
-use crate::run::sampler::Sampler;
-use crate::run::tokenizer::Tokenizer;
-use crate::run::Transformer;
+use crate::llama2::sampler::Sampler;
+use crate::llama2::tokenizer::Tokenizer;
+use crate::llama2::Transformer;
 
-mod run;
+mod llama2;
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()

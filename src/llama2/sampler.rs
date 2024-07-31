@@ -2,7 +2,7 @@
 //! The Sampler, which takes logits and returns a sampled token
 //! sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
 
-use crate::run::math::softmax;
+use crate::llama2::math::softmax;
 
 #[derive(Debug)]
 pub struct ProbIndex {

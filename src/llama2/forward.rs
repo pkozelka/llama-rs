@@ -1,5 +1,5 @@
-use crate::run::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
-use crate::run::Transformer;
+use crate::llama2::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
+use crate::llama2::Transformer;
 
 impl Transformer {
     pub fn forward(&mut self, token: usize, pos: usize) -> anyhow::Result<()> {

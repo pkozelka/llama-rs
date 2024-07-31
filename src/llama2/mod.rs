@@ -4,8 +4,8 @@ use std::path::Path;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::run::sampler::Sampler;
-use crate::run::tokenizer::Tokenizer;
+use crate::llama2::sampler::Sampler;
+use crate::llama2::tokenizer::Tokenizer;
 
 mod math;
 mod utilities;
