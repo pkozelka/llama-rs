@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use llama_rs::config::Config;
 use llama_rs::dirty_dbg;
 use crate::llama2::sampler::Sampler;
 use crate::llama2::tokenizer::Tokenizer;
@@ -14,28 +14,6 @@ pub mod tokenizer;
 pub mod sampler;
 
 mod chat;
-
-/// Transformer model
-
-#[derive(Default,Debug)]
-pub struct Config {
-    /// transformer dimension
-    dim: usize,
-    /// for ffn layers
-    hidden_dim: usize,
-    /// number of layers
-    n_layers: usize,
-    /// number of query heads
-    n_heads: usize,
-    /// number of key/value heads (can be < query heads because of multiquery)
-    n_kv_heads: usize,
-    /// vocabulary size, usually 256 (byte-level)
-    pub vocab_size: usize,
-    /// max sequence length
-    pub seq_len: usize,
-
-    shared_weights: bool,
-}
 
 #[derive(Default)]
 struct TransformerWeights {
@@ -118,33 +96,6 @@ pub struct Transformer {
     _file_size: i32,
 }
 
-impl Config {
-    pub(crate) fn read_config(reader: &mut BufReader<File>) -> anyhow::Result<Self> {
-        let dim = reader.read_i32::<LittleEndian>()?;
-        let hidden_dim = reader.read_i32::<LittleEndian>()?;
-        let n_layers = reader.read_i32::<LittleEndian>()?;
-        let n_heads = reader.read_i32::<LittleEndian>()?;
-        let n_kv_heads = reader.read_i32::<LittleEndian>()?;
-        let vocab_size = reader.read_i32::<LittleEndian>()?;
-        let seq_len = reader.read_i32::<LittleEndian>()?;
-
-        // negative vocab size is hacky way of signaling unshared weights. bit yikes.
-        let shared_weights = vocab_size > 0;
-        let vocab_size = vocab_size.abs();
-
-        Ok(Self {
-            dim: dim as usize,
-            hidden_dim: hidden_dim as usize,
-            n_layers: n_layers as usize,
-            n_heads: n_heads as usize,
-            n_kv_heads: n_kv_heads as usize,
-            vocab_size: vocab_size as usize,
-            seq_len: seq_len as usize,
-            shared_weights,
-        })
-    }
-}
-
 impl Transformer {
     pub(crate) fn build_transformer(checkpoint_path: &Path) -> anyhow::Result<Self> {
         let mut transformer = Self::default();
@@ -157,7 +108,7 @@ impl Transformer {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
-        self.config = Config::read_config(&mut reader)?;
+        self.config = Config::read_config(&mut reader)?.0;
         dirty_dbg!("config: {:?}", self.config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
