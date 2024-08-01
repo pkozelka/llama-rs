@@ -2,7 +2,10 @@
 //! The Sampler, which takes logits and returns a sampled token
 //! sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
 
+use std::cell::RefCell;
+
 use llama_rs::dirty_dbg;
+
 use crate::llama2::math::softmax;
 
 #[derive(Debug)]
@@ -21,7 +24,7 @@ pub struct Sampler {
     /// the top-p value
     topp: f32,
     /// the random number generator seed
-    rng_seed: u64,
+    rng_seed: RefCell<u64>,
 }
 
 impl Sampler {
@@ -29,10 +32,10 @@ impl Sampler {
         // buffer only used with nucleus sampling; may not need but it's ~small
         let probindex = Vec::with_capacity(vocab_size);
         //
-        Ok(Self { vocab_size, _probindex: probindex, temperature, topp, rng_seed })
+        Ok(Self { vocab_size, _probindex: probindex, temperature, topp, rng_seed: RefCell::new(rng_seed) })
     }
 
-    pub fn sample(&mut self, logits: &mut [f32]) -> i32 {
+    pub fn sample(&self, logits: &mut [f32]) -> i32 {
         // log_debug!("temperature: {}, topp: {}", self.temperature, self.topp);
         // print first 20 logits
         // log_debug!("sample::logits.len={}", logits.len());
@@ -50,7 +53,9 @@ impl Sampler {
             // apply softmax to the logits to get the probabilities for next token
             softmax(logits);
             // flip a (float) coin (this is our source of entropy for sampling)
-            let coin = random_f32(&mut self.rng_seed);
+            // let coin = random_f32_refcell(&self.rng_seed);
+
+            let coin = random_f32(&mut self.rng_seed.borrow_mut());
             // log_debug!("sample::coin: {:.6}", coin);
             // we sample from this distribution to get the next token
             if self.topp <= 0.0 || self.topp >= 1.0 {

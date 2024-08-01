@@ -97,7 +97,7 @@ impl Transformer {
     /// > I manually inspected the tokens for a few chat conversations compared to
     /// > python reference and that seemed ok, but this was not thoroughly tested and
     /// > is not safely implemented, it's more a proof of concept atm.
-    pub(crate) fn chat(&mut self, tokenizer: &Tokenizer, sampler: &mut Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn chat(&mut self, tokenizer: &Tokenizer, sampler: &Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
         let mut prompt_tokens = Vec::new();
         let mut user_idx = 0;
 

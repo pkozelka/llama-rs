@@ -87,7 +87,7 @@ impl Transformer {
         Ok(())
     }
 
-    pub(crate) fn generate(&mut self, tokenizer: &Tokenizer, sampler: &mut Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn generate(&mut self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
         prompt_tokens.iter().enumerate().for_each(|(i, t)| dirty_dbg!("prompt_tokens[{i}]={t}"));
 
