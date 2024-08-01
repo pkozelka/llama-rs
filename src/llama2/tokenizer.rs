@@ -59,28 +59,29 @@ impl Tokenizer {
             tokenizer.vocab.push(String::from_utf8(vocab)?);
             tokenizer.vocab_scores.push(score);
         }
-        Ok(tokenizer)
-    }
 
-    pub fn encode(&mut self, text: &str, bos: bool, eos: bool) -> anyhow::Result<Vec<usize>> {
-        dirty_dbg!("encode(text='{text}',\n  bos={bos}, eos={eos})");
-        // encode the string text (input) into an upper-bound preallocated tokens[] array
-        // bos != 0 means prepend the BOS token (=1), eos != 0 means append the EOS token (=2)
-        if text.is_empty() {
-            panic!("cannot encode NULL text");
-        }
-
-        // lazily malloc and sort the vocabulary
-        if self.sorted_vocab.is_empty() {
-            let mut sorted_vocab = Vec::with_capacity(self.vocab.len());
-            for id in 0..self.vocab.len() {
-                let token_index = TokenIndex { str: self.vocab[id].clone(), id };
+        // ((not lazily)) eagerly malloc and sort the vocabulary
+        if tokenizer.sorted_vocab.is_empty() {
+            let mut sorted_vocab = Vec::with_capacity(tokenizer.vocab.len());
+            for id in 0..tokenizer.vocab.len() {
+                let token_index = TokenIndex { str: tokenizer.vocab[id].clone(), id };
                 // log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
 
                 sorted_vocab.push(token_index);
             }
             sorted_vocab.sort_by(|a, b| a.str.cmp(&b.str));
-            self.sorted_vocab = sorted_vocab;
+            tokenizer.sorted_vocab = sorted_vocab;
+        }
+
+        Ok(tokenizer)
+    }
+
+    pub fn encode(&self, text: &str, bos: bool, eos: bool) -> anyhow::Result<Vec<usize>> {
+        dirty_dbg!("encode(text='{text}',\n  bos={bos}, eos={eos})");
+        // encode the string text (input) into an upper-bound preallocated tokens[] array
+        // bos != 0 means prepend the BOS token (=1), eos != 0 means append the EOS token (=2)
+        if text.is_empty() {
+            panic!("cannot encode NULL text");
         }
 
         let mut tokens = self.process_unicode_text(text, bos);
