@@ -52,7 +52,7 @@ struct Cli {
     /// e.g. out/model.bin
     checkpoint_path: PathBuf,
     ///
-    #[arg(short='z', default_value = "../llama2.c/tokenizer.bin")]
+    #[arg(short='z', default_value = "downloads/llama2c-tokenizer.bin")]
     tokenizer_path: PathBuf,
     /// 0.0 = greedy deterministic. 1.0 = original. don't set higher
     #[arg(short, default_value = "1.0")]
