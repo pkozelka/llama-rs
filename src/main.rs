@@ -27,6 +27,8 @@ fn main() -> anyhow::Result<()> {
         args.steps = transformer.config.seq_len;
     }
 
+    let args = args; // make args immutable
+
     // build the Tokenizer via the tokenizer .bin file
     let tokenizer = Tokenizer::build_tokenizer(&args.tokenizer_path, transformer.config.vocab_size)?;
 
