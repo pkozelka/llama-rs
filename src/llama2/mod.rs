@@ -62,23 +62,26 @@ pub struct Transformer {
 
 impl Transformer {
     pub(crate) fn build_transformer(checkpoint_path: &Path) -> anyhow::Result<Self> {
-        let mut transformer = Self::default();
-        transformer.read_checkpoint(checkpoint_path)?;
+        let mut transformer = Self::read_checkpoint(checkpoint_path)?;
         transformer.state = RunState::malloc_run_state(&transformer.config);
         Ok(transformer)
     }
 
-    fn read_checkpoint(&mut self, checkpoint_path: &Path) -> anyhow::Result<()> {
+    fn read_checkpoint(checkpoint_path: &Path) -> anyhow::Result<Self> {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
-        self.config = Config::read_config(&mut reader)?;
-        dirty_dbg!("config: {:?}", self.config);
+        let config = Config::read_config(&mut reader)?;
+        dirty_dbg!("config: {:?}", config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
         // INSTEAD: we just read the weights, as mmap is not easily available in Rust
-        self.weights.read_weights(&mut reader, &self.config)?;
-        Ok(())
+        let weights = TransformerWeights::read_weights(&mut reader, &config)?;
+        Ok(Self{
+            config,
+            weights,
+            state: RunState::default(),
+        })
     }
 
     pub(crate) fn generate(&mut self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
