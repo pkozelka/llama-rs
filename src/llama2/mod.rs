@@ -50,7 +50,6 @@ struct RunState {
     value_cache: Vec<f32>,
 }
 
-#[derive(Default)]
 pub struct Transformer {
     /// the hyperparameters of the architecture (the blueprint)
     pub config: Config,
@@ -61,13 +60,13 @@ pub struct Transformer {
 }
 
 impl Transformer {
-    pub(crate) fn build_transformer(checkpoint_path: &Path) -> anyhow::Result<Self> {
-        let mut transformer = Self::read_checkpoint(checkpoint_path)?;
-        transformer.state = RunState::malloc_run_state(&transformer.config);
-        Ok(transformer)
-    }
-
-    fn read_checkpoint(checkpoint_path: &Path) -> anyhow::Result<Self> {
+    /// Initializes the Transformer object.
+    ///
+    /// This function corresponds to these original functions in the `llama2.c` code:
+    /// - build_transformer
+    /// - read_checkpoint
+    /// - malloc_run_state
+    pub fn new(checkpoint_path: &Path) -> anyhow::Result<Self> {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
@@ -77,11 +76,8 @@ impl Transformer {
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
         // INSTEAD: we just read the weights, as mmap is not easily available in Rust
         let weights = TransformerWeights::read_weights(&mut reader, &config)?;
-        Ok(Self{
-            config,
-            weights,
-            state: RunState::default(),
-        })
+        let state = RunState::malloc_run_state(&config);
+        Ok(Self{ config, weights, state, })
     }
 
     pub(crate) fn generate(&mut self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
