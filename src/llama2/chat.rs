@@ -1,6 +1,6 @@
 use crate::llama2::sampler::Sampler;
 use crate::llama2::tokenizer::Tokenizer;
-use crate::llama2::Transformer;
+use crate::llama2::{Transformer, utilities};
 
 /* convert from C:
 
@@ -116,7 +116,7 @@ impl Transformer {
                         None => {
                             // system prompt was not passed in, attempt to get it from stdin
                             // read_stdin("Enter system prompt (optional): ", system_prompt, sizeof(system_prompt));
-                            read_stdin("Enter system prompt (optional): ")?
+                            utilities::read_stdin("Enter system prompt (optional): ")?
                         }
                         Some(cli_system_prompt) => {
                             // system prompt was passed in, use it
@@ -132,7 +132,7 @@ impl Transformer {
                     cli_user_prompt.clone()
                 } else {
                     // otherwise get user prompt from stdin
-                    read_stdin("User: ")?
+                    utilities::read_stdin("User: ")?
                 };
                 // render user/system prompts into the Llama 2 Chat schema
                 let rendered_prompt = if pos == 0 && !system_prompt.is_empty() {
@@ -175,11 +175,3 @@ impl Transformer {
     }
 }
 
-fn read_stdin(message: &str) -> anyhow::Result<String> {
-    println!("{message}");
-    let mut buf = String::new();
-    match std::io::stdin().read_line(&mut buf) {
-        Ok(_) => Ok(buf),
-        Err(e) => Err(anyhow::anyhow!("error reading stdin: {e}"))
-    }
-}

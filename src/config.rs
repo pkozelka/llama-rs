@@ -34,46 +34,59 @@ pub enum ModelFormat {
 }
 
 impl Config {
+    const AK42_MAGIC: u32 = 0x616b3432; // b"ak42"
 
     /// Read the model configuration from a reader and position the reader at the start of the model data.
-    pub fn read_config<R: Read + Seek>(reader: &mut R) -> anyhow::Result<(Self, ModelFormat)> {
+    pub fn read_config<R: Read + Seek>(reader: &mut R) -> anyhow::Result<Self> {
         let pos = reader.stream_position()?;
         let magic = reader.read_u32::<LittleEndian>()?;
-        if magic == 0x616b3432/*b"ak42"*/ {
+        if magic == Self::AK42_MAGIC {
             let version = reader.read_i32::<LittleEndian>()?;
-            let mut config = Self::read_config_legacy(reader)?;
-            let shared_weights = reader.read_u8()?;
-            // C99 _Bool representation:
-            config.shared_weights = shared_weights != 0;
-            let model_format = match version {
-                1 => ModelFormat::V1,
-                2 => {
-                    let group_size = reader.read_i32::<LittleEndian>()?;
-                    log::debug!("group_size: {}", group_size);
-                    config.group_size = Some(group_size as usize);
-                    ModelFormat::V2
-                }
-                _ => return Err(anyhow::anyhow!("unsupported model version: {}", version)),
+            log::debug!("AK42 model format version {version}");
+            match version {
+                1 => {},
+                2 => {}
+                _ => return Err(anyhow::anyhow!("unsupported AK42 model version: {}", version)),
             };
-            Ok((config, model_format))
+            let config = Self::read_config_params(reader, version)?;
+            reader.seek(std::io::SeekFrom::Start(pos + 256))?;
+            Ok(config)
         } else {
+            // legacy version, without magic and explicit version specified
+            log::debug!("legacy model format");
             reader.seek(std::io::SeekFrom::Start(pos))?;
-            let config = Self::read_config_legacy(reader)?;
-            Ok((config, ModelFormat::Legacy))
+            let config = Self::read_config_params(reader, 0)?;
+            Ok(config)
         }
     }
-    fn read_config_legacy<R: Read + Seek>(reader: &mut R) -> anyhow::Result<Self> {
+    fn read_config_params<R: Read + Seek>(reader: &mut R, version: i32) -> anyhow::Result<Self> {
         let dim = reader.read_u32::<LittleEndian>()?;
         let hidden_dim = reader.read_u32::<LittleEndian>()?;
         let n_layers = reader.read_u32::<LittleEndian>()?;
         let n_heads = reader.read_u32::<LittleEndian>()?;
         let n_kv_heads = reader.read_u32::<LittleEndian>()?;
-        let vocab_size = reader.read_i32::<LittleEndian>()?;
+        let vocab_size_i32 = reader.read_i32::<LittleEndian>()?;
         let seq_len = reader.read_u32::<LittleEndian>()?;
 
-        // negative vocab size is hacky way of signaling unshared weights. bit yikes.
-        let shared_weights = vocab_size > 0;
-        let vocab_size = vocab_size.abs();
+        let shared_weights;
+        let vocab_size;
+        let group_size;
+        if version == 0 {
+            // negative vocab size is hacky way of signaling unshared weights. bit yikes.
+            shared_weights = vocab_size_i32 > 0;
+            vocab_size = vocab_size_i32.abs() as usize;
+            group_size = None;
+        } else {
+            shared_weights = reader.read_i8()? > 0;
+            vocab_size = vocab_size_i32 as usize;
+            group_size = if version == 1 {
+                None
+            } else {
+                let gsz = reader.read_i32::<LittleEndian>()?;
+                log::debug!("group_size: {}", gsz);
+                Some(gsz as usize)
+            };
+        }
 
         Ok(Self {
             dim: dim as usize,
@@ -81,10 +94,10 @@ impl Config {
             n_layers: n_layers as usize,
             n_heads: n_heads as usize,
             n_kv_heads: n_kv_heads as usize,
-            vocab_size: vocab_size as usize,
+            vocab_size,
             seq_len: seq_len as usize,
             shared_weights,
-            group_size: None,
+            group_size,
         })
     }
 }
@@ -97,9 +110,10 @@ mod tests {
     #[ignore]
     #[test]
     fn legacy_stories15m_bin() -> anyhow::Result<()>{
+        env_logger::builder().filter_level(log::LevelFilter::Debug).init();
+
         let mut file = File::open("downloads/stories15M.bin")?;
-        let (config, model_format) = Config::read_config(&mut file).unwrap();
-        assert_eq!(model_format, ModelFormat::Legacy, "Legacy model format expected");
+        let config = Config::read_config(&mut file).unwrap();
         assert_eq!(config.dim, 288, "dim");
         assert_eq!(config.hidden_dim, 768, "hidden_dim");
         assert_eq!(config.n_layers, 6, "n_layers");
@@ -109,15 +123,18 @@ mod tests {
         assert_eq!(config.seq_len, 256, "seq_len");
         assert_eq!(config.shared_weights, true, "shared_weights");
         assert_eq!(config.group_size, None, "group_size");
+        assert_eq!(file.stream_position()?, 28, "stream_position");
         Ok(())
     }
 
     #[ignore]
     #[test]
     fn legacy_stories42m_bin()  -> anyhow::Result<()>{
+        env_logger::builder().filter_level(log::LevelFilter::Debug).init();
+
         let mut file = File::open("downloads/stories42M.bin")?;
-        let (config, model_format) = Config::read_config(&mut file).unwrap();
-        assert_eq!(model_format, ModelFormat::Legacy, "Legacy model format expected");
+        let config = Config::read_config(&mut file).unwrap();
+        assert_eq!(file.stream_position()?, 28, "stream_position");
         assert_eq!(config.dim, 512, "dim");
         assert_eq!(config.hidden_dim, 1376, "hidden_dim");
         assert_eq!(config.n_layers, 8, "n_layers");
@@ -134,8 +151,8 @@ mod tests {
     #[test]
     fn llama2_7b_q80_bin()  -> anyhow::Result<()>{
         let mut file = File::open("downloads/llama2_7b_q80.bin")?;
-        let (config, model_format) = Config::read_config(&mut file).unwrap();
-        assert_eq!(model_format, ModelFormat::V2, "model format");
+        let config = Config::read_config(&mut file).unwrap();
+        assert_eq!(file.stream_position()?, 256, "stream_position");
         assert_eq!(config.dim, 4096, "dim");
         assert_eq!(config.hidden_dim, 11008, "hidden_dim");
         assert_eq!(config.n_layers, 32, "n_layers");
@@ -152,8 +169,7 @@ mod tests {
     #[test]
     fn llama3_8b_instruct_bin()  -> anyhow::Result<()>{
         let mut file = File::open("downloads/llama3_8b_instruct.bin")?;
-        let (config, model_format) = Config::read_config(&mut file).unwrap();
-        assert_eq!(model_format, ModelFormat::Legacy, "model format");
+        let config = Config::read_config(&mut file).unwrap();
         assert_eq!(config.dim, 4096, "dim");
         assert_eq!(config.hidden_dim, 14336, "hidden_dim");
         assert_eq!(config.n_layers, 32, "n_layers");

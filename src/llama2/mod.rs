@@ -58,12 +58,6 @@ pub struct Transformer {
     weights: TransformerWeights,
     /// buffers for the "wave" of activations in the forward pass
     state: RunState,
-    /// some more state needed to properly clean up the memory mapping (sigh)
-    _fd: i32,
-    /// memory mapped data pointer
-    _data: Vec<f32>,
-    /// size of the checkpoint file in bytes
-    _file_size: i32,
 }
 
 impl Transformer {
@@ -78,7 +72,7 @@ impl Transformer {
         let file = File::open(checkpoint_path)?;
         let mut reader = BufReader::new(file);
         // read in the config header from reader
-        self.config = Config::read_config(&mut reader)?.0;
+        self.config = Config::read_config(&mut reader)?;
         dirty_dbg!("config: {:?}", self.config);
         // ORIGINAL: memory map the Transformer weights into the data pointer
         //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
@@ -99,14 +93,14 @@ impl Transformer {
             // forward the transformer to get logits for the next token
             self.forward(token as usize, pos)?;
             // advance the state machine
-            let next = if pos + 1 < prompt_tokens.len() {
+            pos += 1;
+            let next = if pos < prompt_tokens.len() {
                 // if we are still processing the input prompt, force the next prompt token
-                prompt_tokens[pos + 1] as i32
+                prompt_tokens[pos] as i32
             } else {
                 // otherwise sample the next token from the logits
                 sampler.sample(&mut self.state.logits)
             };
-            pos += 1;
             // data-dependent terminating condition: the BOS (=1) token delimits sequences
             if next == 1 { break; }
             // print the token as string, decode it with the Tokenizer object

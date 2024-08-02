@@ -34,3 +34,12 @@ pub(crate) fn read_f32_table(reader: &mut BufReader<File>, layers: usize, size: 
     reader.read_f32_into::<LittleEndian>(&mut table)?;
     Ok(table)
 }
+
+pub fn read_stdin(message: &str) -> anyhow::Result<String> {
+    println!("{message}");
+    let mut buf = String::new();
+    match std::io::stdin().read_line(&mut buf) {
+        Ok(_) => Ok(buf),
+        Err(e) => Err(anyhow::anyhow!("error reading stdin: {e}"))
+    }
+}
