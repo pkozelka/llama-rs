@@ -11,17 +11,12 @@ pub struct Tokenizer {
     vocab: Vec<String>,
     /// the scores of the vocabulary
     vocab_scores: Vec<f32>,
-    /// the sorted vocabulary
-    sorted_vocab: Vec<TokenIndex>,
+    /// the sorted vocabulary .. contains indices into the [vocab] array
+    sorted_vocab: Vec<usize>,
     /// the maximum token length
     max_token_length: usize,
     /// the byte pieces
     byte_pieces: Vec<u8>,
-}
-
-struct TokenIndex {
-    str: String,
-    id: usize,
 }
 
 impl Tokenizer {
@@ -64,12 +59,13 @@ impl Tokenizer {
         if tokenizer.sorted_vocab.is_empty() {
             let mut sorted_vocab = Vec::with_capacity(tokenizer.vocab.len());
             for id in 0..tokenizer.vocab.len() {
-                let token_index = TokenIndex { str: tokenizer.vocab[id].clone(), id };
-                // log::debug!("encode: vocab[{}]='{}'", id, self.vocab[id]);
-
-                sorted_vocab.push(token_index);
+                sorted_vocab.push(id);
             }
-            sorted_vocab.sort_by(|a, b| a.str.cmp(&b.str));
+            sorted_vocab.sort_by(|a, b| {
+                let sa = &tokenizer.vocab[*a];
+                let sb = &tokenizer.vocab[*b];
+                sa.cmp(sb)
+            });
             tokenizer.sorted_vocab = sorted_vocab;
         }
 
@@ -175,10 +171,9 @@ impl Tokenizer {
     }
 
     fn str_lookup(&self, str: &str) -> Option<usize> {
-        // efficiently find the perfect match for str in vocab, return its index or -1 if not found
-        let tok = TokenIndex { str: str.to_string(), id: 0 }; // acts as the key to search for
-        match self.sorted_vocab.binary_search_by(|a| a.str.cmp(&tok.str)) {
-            Ok(idx) => Some(self.sorted_vocab[idx].id),
+        // efficiently find the perfect match for str in vocab, return its index
+        match self.sorted_vocab.binary_search_by(|a| self.vocab[*a].as_str().cmp(str)) {
+            Ok(idx) => Some(self.sorted_vocab[idx]),
             Err(_) => None,
         }
     }
