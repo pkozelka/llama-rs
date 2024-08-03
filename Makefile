@@ -62,3 +62,4 @@ downloads/llama2c-tokenizer.bin: downloads
 download-all: downloads/stories15M.bin downloads/stories42M.bin
 
 test: llama2-rs-test
+	cargo test --release

@@ -195,8 +195,6 @@ impl Tokenizer {
             if let Ok(byte_val) = u8::from_str_radix(byte_val, 16) {
                 let byte_val = byte_val as usize;
                 let byte_val = byte_val * 2;
-                let byte_val = byte_val as usize;
-                let byte_val = byte_val as usize;
                 return String::from_utf8_lossy(&self.byte_pieces[byte_val..byte_val + 2]).to_string();
             }
         }

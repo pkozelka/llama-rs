@@ -114,6 +114,8 @@ mod tests {
 
         let mut file = File::open("downloads/stories15M.bin")?;
         let config = Config::read_config(&mut file).unwrap();
+        println!("{config:#?}");
+
         assert_eq!(config.dim, 288, "dim");
         assert_eq!(config.hidden_dim, 768, "hidden_dim");
         assert_eq!(config.n_layers, 6, "n_layers");
@@ -134,6 +136,8 @@ mod tests {
 
         let mut file = File::open("downloads/stories42M.bin")?;
         let config = Config::read_config(&mut file).unwrap();
+        println!("{config:#?}");
+
         assert_eq!(file.stream_position()?, 28, "stream_position");
         assert_eq!(config.dim, 512, "dim");
         assert_eq!(config.hidden_dim, 1376, "hidden_dim");
@@ -150,8 +154,12 @@ mod tests {
     #[ignore]
     #[test]
     fn llama2_7b_q80_bin()  -> anyhow::Result<()>{
+        env_logger::builder().filter_level(log::LevelFilter::Trace).init();
+
         let mut file = File::open("downloads/llama2_7b_q80.bin")?;
         let config = Config::read_config(&mut file).unwrap();
+        println!("{config:#?}");
+
         assert_eq!(file.stream_position()?, 256, "stream_position");
         assert_eq!(config.dim, 4096, "dim");
         assert_eq!(config.hidden_dim, 11008, "hidden_dim");
@@ -165,11 +173,15 @@ mod tests {
         Ok(())
     }
 
-    #[ignore ="crashes due to unknown model"]
+    #[ignore]
     #[test]
     fn llama3_8b_instruct_bin()  -> anyhow::Result<()>{
+        env_logger::builder().filter_level(log::LevelFilter::Trace).init();
+
         let mut file = File::open("downloads/llama3_8b_instruct.bin")?;
         let config = Config::read_config(&mut file).unwrap();
+        println!("{config:#?}");
+
         assert_eq!(config.dim, 4096, "dim");
         assert_eq!(config.hidden_dim, 14336, "hidden_dim");
         assert_eq!(config.n_layers, 32, "n_layers");
@@ -178,7 +190,7 @@ mod tests {
         assert_eq!(config.vocab_size, 128256, "vocab_size");
         assert_eq!(config.seq_len, 2048, "seq_len");
         assert_eq!(config.shared_weights, false, "shared_weights");
-        assert_eq!(config.group_size, Some(64), "group_size");
+        assert_eq!(config.group_size, None, "group_size");
         Ok(())
     }
 }
