@@ -1,6 +1,7 @@
 //! ----------------------------------------------------------------------------
 //! The Byte Pair Encoding (BPE) Tokenizer that translates strings <-> tokens
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -11,8 +12,6 @@ pub struct Tokenizer {
     vocab: Vec<String>,
     /// the scores of the vocabulary
     vocab_scores: Vec<f32>,
-    /// the sorted vocabulary .. contains indices into the [vocab] array
-    sorted_vocab: Vec<usize>,
     /// the maximum token length
     max_token_length: usize,
     /// the byte pieces
@@ -27,7 +26,6 @@ impl Tokenizer {
         let mut tokenizer = Tokenizer {
             vocab: Vec::with_capacity(vocab_size),
             vocab_scores: Vec::with_capacity(vocab_size),
-            sorted_vocab: Vec::new(),
             max_token_length: 0,
             byte_pieces: vec![0; 256 * 2],
         };
@@ -55,20 +53,6 @@ impl Tokenizer {
             tokenizer.vocab_scores.push(score);
         }
 
-        // ((not lazily)) eagerly malloc and sort the vocabulary
-        if tokenizer.sorted_vocab.is_empty() {
-            let mut sorted_vocab = Vec::with_capacity(tokenizer.vocab.len());
-            for id in 0..tokenizer.vocab.len() {
-                sorted_vocab.push(id);
-            }
-            sorted_vocab.sort_by(|a, b| {
-                let sa = &tokenizer.vocab[*a];
-                let sb = &tokenizer.vocab[*b];
-                sa.cmp(sb)
-            });
-            tokenizer.sorted_vocab = sorted_vocab;
-        }
-
         Ok(tokenizer)
     }
 
@@ -80,7 +64,9 @@ impl Tokenizer {
             panic!("cannot encode NULL text");
         }
 
-        let mut tokens = self.process_unicode_text(text, bos);
+        let sorted_vocab = SortedVocab::new(&self.vocab);
+
+        let mut tokens = self.process_unicode_text(&sorted_vocab, text, bos);
         tokens.iter().enumerate().for_each(|(i, t)| dirty_dbg!("tokens[{i}]={t} '{}'", self.vocab[*t]));
 
         // merge the best consecutive pair each iteration, according the scores in vocab_scores
@@ -92,7 +78,7 @@ impl Tokenizer {
             for i in 0..tokens.len() - 1 {
                 // check if we can merge the pair (tokens[i], tokens[i+1])
                 let str_buffer = format!("{}{}", self.vocab[tokens[i] as usize], self.vocab[tokens[i + 1] as usize]);
-                if let Some(id) = self.str_lookup(&str_buffer) {
+                if let Some(id) = sorted_vocab.str_lookup(&str_buffer) {
                     if self.vocab_scores[id] > best_score {
                         // this merge pair exists in vocab! record its score and position
                         best_score = self.vocab_scores[id];
@@ -127,7 +113,7 @@ impl Tokenizer {
         Ok(tokens)
     }
 
-    fn process_unicode_text(&self, text: &str, bos: bool) -> Vec<usize> {
+    fn process_unicode_text<'a>(&self, sorted_vocab: &SortedVocab, text: &str, bos: bool) -> Vec<usize> {
         // start at 0 tokens
         let mut tokens = Vec::with_capacity(text.len());
 
@@ -139,7 +125,7 @@ impl Tokenizer {
         // add_dummy_prefix is true by default
         // so prepend a dummy prefix token to the input string, but only if text != ""
         if !text.is_empty() {
-            if let Some(dummy_prefix) = self.str_lookup(" ") {
+            if let Some(dummy_prefix) = sorted_vocab.str_lookup(" ") {
                 tokens.push(dummy_prefix)
             };
         }
@@ -148,8 +134,8 @@ impl Tokenizer {
         for c in text.chars() {
             str_buffer.clear();
             str_buffer.push(c);
-            match self.str_lookup(&str_buffer) {
-                Some(id) => {
+            match sorted_vocab.str_lookup(&str_buffer) {
+                Some( id) => {
                     // log::debug!("encode: str_buffer: '{}' -> id={}", str_buffer, id);
                     tokens.push(id)
                 },
@@ -170,14 +156,6 @@ impl Tokenizer {
         tokens
     }
 
-    fn str_lookup(&self, str: &str) -> Option<usize> {
-        // efficiently find the perfect match for str in vocab, return its index
-        match self.sorted_vocab.binary_search_by(|a| self.vocab[*a].as_str().cmp(str)) {
-            Ok(idx) => Some(self.sorted_vocab[idx]),
-            Err(_) => None,
-        }
-    }
-
     pub fn decode(&self, prev_token: i32, token: i32) -> String {
         let piece = &self.vocab[token as usize];
         // following BOS (1) token, sentencepiece decoder strips any leading whitespace (see PR #89)
@@ -194,6 +172,25 @@ impl Tokenizer {
             }
         }
         piece.to_string()
+    }
+
+}
+
+struct SortedVocab<'a> {
+    sorted_vocab: HashMap<&'a str, usize>,
+}
+
+impl <'a> SortedVocab<'a> {
+
+    fn new(vocab: &'a[String]) -> Self {
+        let mut sorted_vocab: HashMap<&str, usize> = HashMap::with_capacity(vocab.len());
+        for id in 0..vocab.len() {
+            sorted_vocab.insert(&vocab[id], id);
+        }
+        Self { sorted_vocab }
+    }
+    fn str_lookup(&self, key: &str) -> Option<usize> {
+        self.sorted_vocab.get(key).copied()
     }
 
 }
