@@ -5,50 +5,18 @@ use std::path::Path;
 use llama_rs::config::Config;
 use llama_rs::dirty_dbg;
 use weights::TransformerWeights;
+use crate::llama2::runstate::RunState;
 use crate::llama2::sampler::Sampler;
 use crate::llama2::tokenizer::Tokenizer;
 
 mod math;
 mod utilities;
-mod forward;
 pub mod tokenizer;
 pub mod sampler;
 
 mod weights;
 
-mod chat;
-
-/// current wave of activations
-#[derive(Default)]
-pub struct RunState {
-    /// activation at current time stamp (dim,)
-    x: Vec<f32>,
-    /// same, but inside a residual branch (dim,)
-    xb: Vec<f32>,
-    /// an additional buffer just for convenience (dim,)
-    xb2: Vec<f32>,
-    /// buffer for hidden dimension in the ffn (hidden_dim,)
-    hb: Vec<f32>,
-    /// buffer for hidden dimension in the ffn (hidden_dim,)
-    hb2: Vec<f32>,
-    /// query (dim,)
-    q: Vec<f32>,
-    /// key (dim,)
-    k_index: usize,
-    /// value (dim,)
-    v_index: usize,
-    /// buffer for scores/attention values (n_heads, seq_len)
-    att: Vec<f32>,
-    /// output logits
-    logits: Vec<f32>,
-
-    // kv cache
-
-    /// (layer, seq_len, dim)
-    key_cache: Vec<f32>,
-    /// (layer, seq_len, dim)
-    value_cache: Vec<f32>,
-}
+mod runstate;
 
 pub struct Transformer {
     /// the hyperparameters of the architecture (the blueprint)
@@ -114,32 +82,88 @@ impl Transformer {
         }
         Ok(())
     }
-}
 
+    /// chat loop: comment from the original C code:
+    /// > I manually inspected the tokens for a few chat conversations compared to
+    /// > python reference and that seemed ok, but this was not thoroughly tested and
+    /// > is not safely implemented, it's more a proof of concept atm.
+    pub(crate) fn chat(&self, tokenizer: &Tokenizer, sampler: &Sampler, cli_user_prompt: &String, cli_system_prompt: &Option<String>, steps: usize) -> anyhow::Result<()> {
+        let  mut runstate = RunState::malloc_run_state(&self.config);
 
-impl RunState {
-    /// constructor
-    pub(crate) fn malloc_run_state(config: &Config) -> RunState {
-        let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
-        let dim = config.dim;
-        let hidden_dim = config.hidden_dim;
-        let key_cache = vec![0.0; config.n_layers * config.seq_len * kv_dim];
-        let value_cache = vec![0.0; config.n_layers * config.seq_len * kv_dim];
-        RunState {
-            x: vec![0.0; dim],
-            xb: vec![0.0; dim],
-            xb2: vec![0.0; dim],
-            hb: vec![0.0; hidden_dim],
-            hb2: vec![0.0; hidden_dim],
-            q: vec![0.0; dim],
-            k_index: 0,
-            v_index: 0,
-            att: vec![0.0; config.n_heads * config.seq_len],
-            logits: vec![0.0; config.vocab_size],
-            key_cache: key_cache,
-            value_cache: value_cache,
+        let mut prompt_tokens = Vec::new();
+        let mut user_idx = 0;
+
+        // start the main loop
+        let mut user_turn = true; // user starts
+        let mut next = 0;        // will store the next token in the sequence
+        let mut pos = 0;     // position in the sequence
+        while pos < steps {
+
+            // when it is the user's turn to contribute tokens to the dialog...
+            if user_turn {
+                // get the (optional) system prompt at position 0
+                let system_prompt = if pos == 0 {
+                    // at position 0, the user can also contribute a system prompt
+                    match cli_system_prompt {
+                        None => {
+                            // system prompt was not passed in, attempt to get it from stdin
+                            // read_stdin("Enter system prompt (optional): ", system_prompt, sizeof(system_prompt));
+                            utilities::read_stdin("Enter system prompt (optional): ")?
+                        }
+                        Some(cli_system_prompt) => {
+                            // system prompt was passed in, use it
+                            cli_system_prompt.clone()
+                        }
+                    }
+                } else {
+                    String::new()
+                };
+                // get the user prompt
+                let user_prompt = if pos == 0 && !cli_user_prompt.is_empty() {
+                    // user prompt for position 0 was passed in, use it
+                    cli_user_prompt.clone()
+                } else {
+                    // otherwise get user prompt from stdin
+                    utilities::read_stdin("User: ")?
+                };
+                // render user/system prompts into the Llama 2 Chat schema
+                let rendered_prompt = if pos == 0 && !system_prompt.is_empty() {
+                    format!("[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{user_prompt} [/INST]")
+                } else {
+                    format!("[INST] {user_prompt} [/INST]")
+                };
+                prompt_tokens = tokenizer.encode(&rendered_prompt, true, false)?;
+                user_idx = 0; // reset the user index
+                user_turn = false;
+                print!("Assistant: ");
+            }
+            // token: the current token to feed into the transformer
+            let token = if user_idx < prompt_tokens.len() {
+                // if we are still processing the input prompt, force the next prompt token
+                let token = prompt_tokens[user_idx];
+                user_idx += 1;
+                token
+            } else {
+                // otherwise use the next token sampled from previous turn
+                next
+            };
+            // EOS (=2) token ends the Assistant turn
+            if token == 2 { user_turn = true; }
+
+            // forward the transformer to get logits for the next token
+            runstate.forward(self, token, pos)?;
+            next = sampler.sample(&mut runstate.logits) as usize;
+            pos += 1;
+
+            if user_idx >= prompt_tokens.len() && next != 2 {
+                // the Assistant is responding, so print its output
+                let piece = tokenizer.decode(token as i32, next as i32);
+                print!("{}", piece);
+            }
+            if next == 2 { println!(); }
         }
+        println!();
+        Ok(())
     }
-
-    // `RunState::free_run_state` is implicit by `drop`
 }
+
