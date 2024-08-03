@@ -1,13 +1,13 @@
 use llama_rs::dirty_dbg;
 use crate::llama2::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
-use crate::llama2::Transformer;
+use crate::llama2::{RunState, Transformer};
 
-impl Transformer {
-    pub fn forward(&mut self, token: usize, pos: usize) -> anyhow::Result<()> {
+impl RunState {
+    pub fn forward(&mut self, transformer: &Transformer, token: usize, pos: usize) -> anyhow::Result<()> {
         dirty_dbg!("forward(token={}, pos={})", token, pos);
-        let p = &self.config;
-        let w = &self.weights;
-        let s = &mut self.state;
+        let p = &transformer.config;
+        let w = &transformer.weights;
+        let s = self;
         let x = &mut s.x;
         let dim = p.dim;
         let kv_dim = (p.dim * p.n_kv_heads) / p.n_heads;

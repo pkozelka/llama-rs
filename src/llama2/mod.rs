@@ -20,7 +20,7 @@ mod chat;
 
 /// current wave of activations
 #[derive(Default)]
-struct RunState {
+pub struct RunState {
     /// activation at current time stamp (dim,)
     x: Vec<f32>,
     /// same, but inside a residual branch (dim,)
@@ -55,8 +55,6 @@ pub struct Transformer {
     pub config: Config,
     /// the weights of the model
     weights: TransformerWeights,
-    /// buffers for the "wave" of activations in the forward pass
-    state: RunState,
 }
 
 impl Transformer {
@@ -72,15 +70,13 @@ impl Transformer {
         // read in the config header from reader
         let config = Config::read_config(&mut reader)?;
         dirty_dbg!("config: {:?}", config);
-        // ORIGINAL: memory map the Transformer weights into the data pointer
-        //     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
-        // INSTEAD: we just read the weights, as mmap is not easily available in Rust
         let weights = TransformerWeights::read_weights(&mut reader, &config)?;
-        let state = RunState::malloc_run_state(&config);
-        Ok(Self{ config, weights, state, })
+        Ok(Self{ config, weights })
     }
 
-    pub(crate) fn generate(&mut self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+    pub(crate) fn generate(&self, tokenizer: &Tokenizer, sampler: &Sampler, prompt: &str, steps: usize) -> anyhow::Result<()> {
+        let  mut runstate = RunState::malloc_run_state(&self.config);
+
         let prompt_tokens = tokenizer.encode(prompt, true, false)?;
         prompt_tokens.iter().enumerate().for_each(|(i, t)| dirty_dbg!("prompt_tokens[{i}]={t}"));
 
@@ -90,7 +86,7 @@ impl Transformer {
         while pos < steps {
             // log_debug!("generate: pos: {}", pos);
             // forward the transformer to get logits for the next token
-            self.forward(token as usize, pos)?;
+            runstate.forward(&self, token as usize, pos)?;
             // advance the state machine
             pos += 1;
             let next = if pos < prompt_tokens.len() {
@@ -98,7 +94,7 @@ impl Transformer {
                 prompt_tokens[pos] as i32
             } else {
                 // otherwise sample the next token from the logits
-                sampler.sample(&mut self.state.logits)
+                sampler.sample(&mut runstate.logits)
             };
             // data-dependent terminating condition: the BOS (=1) token delimits sequences
             if next == 1 { break; }
@@ -123,8 +119,7 @@ impl Transformer {
 
 impl RunState {
     /// constructor
-    fn malloc_run_state(config: &Config) -> RunState {
-        // log_debug!("malloc_run_state(config={:?})", config);
+    pub(crate) fn malloc_run_state(config: &Config) -> RunState {
         let kv_dim = (config.dim * config.n_kv_heads) / config.n_heads;
         let dim = config.dim;
         let hidden_dim = config.hidden_dim;

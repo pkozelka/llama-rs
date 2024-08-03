@@ -40,7 +40,13 @@ pub struct TransformerWeights {
 
 impl TransformerWeights {
 
+    /// ORIGINAL: memory map the Transformer weights into the data pointer
+    ///     *data = mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
+    /// INSTEAD: we just read the weights, as mmap is not easily available in Rust
+    ///
     /// TODO: consider using this for mmap stuff: https://docs.rs/memmap/latest/memmap/struct.Mmap.html
+    ///
+    /// OTOH, I am not sure if mmap would be such a big win here
     fn _memory_map_weights(&mut self, _config: &Config, _ptr: &mut Vec<f32>, _shared_weights: i32) {
         unimplemented!("memory mapping is not easily available in Rust, so we read the weights into memory")
     }
