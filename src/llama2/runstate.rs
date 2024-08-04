@@ -149,10 +149,7 @@ impl RunState {
                 dirty_dbg!("L{l:02}/h{h} Cc) att[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", att[0], att[1], att[2], att[3]);
 
                 // softmax the scores to get attention weights, from 0..pos inclusively
-                let pos = pos as f32;
-                let att = &mut s.att[h * p.seq_len..];
-                let att = &mut att[..=pos as usize];
-                softmax(att);
+                softmax(&mut att[..=pos]);
 
                 // weighted sum of the values, store back into xb
                 let xb = &mut s.xb[h * head_size..];
