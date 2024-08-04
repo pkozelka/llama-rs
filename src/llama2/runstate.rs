@@ -94,11 +94,11 @@ impl RunState {
             s.v_index = loff + pos * kv_dim;
 
             // qkv matmuls for this position
-            matmul(&mut s.q, &s.xb, &w.wq[l * dim * dim..], dim, dim);
-            let k = &mut s.key_cache[s.k_index..];
-            matmul(k, &s.xb, &w.wk[l * dim * kv_dim..], dim, kv_dim);
-            let v = &mut s.value_cache[s.v_index..];
-            matmul(v, &s.xb, &w.wv[l * dim * kv_dim..], dim, kv_dim);
+            matmul(&mut s.q[..dim], &s.xb, &w.wq[l * dim * dim..]);
+            let k = &mut s.key_cache[s.k_index..][..kv_dim];
+            matmul(k, &s.xb, &w.wk[l * dim * kv_dim..]);
+            let v = &mut s.value_cache[s.v_index..][..kv_dim];
+            matmul(v, &s.xb, &w.wv[l * dim * kv_dim..]);
             dirty_dbg!("L{l:02} B) (q,k,v)[0] = ({:1.6},{:1.6},{:1.6})", s.q[0], k[0], v[0]);
 
             // RoPE relative positional encoding: complex-valued rotate q and k in each head
@@ -171,7 +171,7 @@ impl RunState {
             dirty_dbg!("L{l:02} D) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
 
             // final matmul to get the output of the attention
-            matmul(&mut s.xb2, &s.xb, &w.wo[l * dim * dim..], dim, dim);
+            matmul(&mut s.xb2[..dim], &s.xb, &w.wo[l * dim * dim..]);
             dirty_dbg!("L{l:02} E) xb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb2[0], s.xb2[1], s.xb2[2], s.xb2[3]);
 
             // residual connection back into x
@@ -187,9 +187,9 @@ impl RunState {
             // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
             // first calculate self.w1(x) and self.w3(x)
             let hidden_dim = p.hidden_dim;
-            matmul(&mut s.hb, &s.xb, &w.w1[l * dim * hidden_dim..], dim, hidden_dim);
+            matmul(&mut s.hb[..hidden_dim], &s.xb, &w.w1[l * dim * hidden_dim..]);
             dirty_dbg!("L{l:02} H) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
-            matmul(&mut s.hb2, &s.xb, &w.w3[l * dim * hidden_dim..], dim, hidden_dim);
+            matmul(&mut s.hb2[..hidden_dim], &s.xb, &w.w3[l * dim * hidden_dim..]);
             dirty_dbg!("L{l:02} I) hb2[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb2[0], s.hb2[1], s.hb2[2], s.hb2[3]);
 
             // SwiGLU non-linearity
@@ -204,7 +204,7 @@ impl RunState {
             dirty_dbg!("L{l:02} J) hb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.hb[0], s.hb[1], s.hb[2], s.hb[3]);
 
             // final matmul to get the output of the ffn
-            matmul(&mut s.xb, &s.hb, &w.w2[l * dim * hidden_dim..], hidden_dim, dim);
+            matmul(&mut s.xb[..dim], &s.hb, &w.w2[l * dim * hidden_dim..]);
             dirty_dbg!("L{l:02} K) xb[0,1,2,3] = ({:1.6},{:1.6},{:1.6},{:1.6})", s.xb[0], s.xb[1], s.xb[2], s.xb[3]);
 
             // residual connection
@@ -220,7 +220,7 @@ impl RunState {
         dirty_dbg!("Final_A) x[0,1,2,3,4] = ({:1.6},{:1.6},{:1.6},{:1.6},{:1.6})", x[0], x[1], x[2], x[3], x[4]);
 
         // classifier into logits
-        matmul(&mut s.logits, x, &w.wcls, p.dim, p.vocab_size);
+        matmul(&mut s.logits[..p.vocab_size], x, &w.wcls);
         Ok(())
     }
 }
