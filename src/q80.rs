@@ -1,7 +1,10 @@
+#![allow(dead_code)]
+
 use std::io::Read;
+
 use byteorder::{LittleEndian, ReadBytesExt};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct QuantizedTensor {
     /// quantized values
     q: Vec<i8>,
@@ -15,15 +18,15 @@ impl QuantizedTensor {
     /// initialize `n` x quantized tensor (with `size_each` elements), starting from memory pointed at *ptr
     /// (note: in C this was about pointing to mmapped memory, but here we use a Read trait)
     fn init_quantized_tensors<R: Read>(mut p: R, n: usize, size_each: usize) -> anyhow::Result<Vec<QuantizedTensor>> {
-        let mut res = vec![QuantizedTensor::default();n];
+        let mut res = vec![QuantizedTensor::default(); n];
         for _ in 0..n {
             let mut q = Vec::with_capacity(size_each);
-            [0..q.capacity()].iter().try_for_each(q.push(p.read_i8()?));
+            [0..q.capacity()].iter().try_for_each(|_| Ok::<(), anyhow::Error>(q.push(p.read_i8()?)))?;
 
             let mut s = Vec::with_capacity(size_each / GS);
-            [0..s.capacity()].iter().try_for_each(s.push(p.read_f32::<LittleEndian>()?));
+            [0..s.capacity()].iter().try_for_each(|_| Ok::<(), anyhow::Error>(s.push(p.read_f32::<LittleEndian>()?)))?;
 
-            res.push(QuantizedTensor { q, s: s });
+            res.push(QuantizedTensor { q, s });
         }
         Ok(res)
     }
