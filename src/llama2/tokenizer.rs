@@ -1,10 +1,11 @@
 //! ----------------------------------------------------------------------------
 //! The Byte Pair Encoding (BPE) Tokenizer that translates strings <-> tokens
 
-use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
+
 use byteorder::{LittleEndian, ReadBytesExt};
+
 use llama_rs::dirty_dbg;
 
 pub struct Tokenizer {
@@ -177,20 +178,32 @@ impl Tokenizer {
 }
 
 struct SortedVocab<'a> {
-    sorted_vocab: HashMap<&'a str, usize>,
+    vocab: &'a[String],
+    sorted_vocab: Vec<usize>
 }
 
 impl <'a> SortedVocab<'a> {
 
     fn new(vocab: &'a[String]) -> Self {
-        let mut sorted_vocab: HashMap<&str, usize> = HashMap::with_capacity(vocab.len());
+        let mut sorted_vocab = Vec::with_capacity(vocab.len());
         for id in 0..vocab.len() {
-            sorted_vocab.insert(&vocab[id], id);
+            sorted_vocab.push(id);
         }
-        Self { sorted_vocab }
+
+        // note: tried sort_by_key, but it was slower
+        sorted_vocab.sort_by(|a, b| {
+            let sa = &vocab[*a];
+            let sb = &vocab[*b];
+            sa.cmp(sb)
+        });
+        Self { vocab, sorted_vocab: sorted_vocab }
     }
+
     fn str_lookup(&self, key: &str) -> Option<usize> {
-        self.sorted_vocab.get(key).copied()
+        match self.sorted_vocab.binary_search_by(|&id| self.vocab[id].as_str().cmp(key)) {
+            Ok(idx) => Some(self.sorted_vocab[idx]),
+            Err(_) => None
+        }
     }
 
 }
