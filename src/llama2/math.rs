@@ -14,40 +14,37 @@ pub fn softmax(array: &mut [f32]) {
         sum += array[i];
     }
     // normalize
-    for i in 0..array.len() {
-        array[i] /= sum;
-    }
+    array.iter_mut().for_each(|x| *x /= sum);
 }
 
 
 pub fn rmsnorm(o: &mut [f32], x: &[f32], weight: &[f32]) {
     // log::debug!("rmsnorm(o.len={}, x.len={}, weight.len={})", o.len(), x.len(), weight.len());
     // calculate sum of squares
-    let mut ss = 0.0;
-    for j in 0..x.len() {
-        ss += x[j] * x[j];
-    }
+    let mut ss = x.iter()
+        .map(|&xi| xi * xi)
+        .sum::<f32>();
     ss /= x.len() as f32;
     ss += 1e-5;
     ss = 1.0 / ss.sqrt();
     // normalize and scale
-    for j in 0..x.len() {
-        o[j] = weight[j] * (ss * x[j]);
-    }
+    x.iter()
+        .zip(o.iter_mut())
+        .zip(weight.iter())
+        .for_each(|((&xi, oi), &wi)| *oi = wi * (ss * xi));
 }
 pub fn rmsnorm_inplace(x: &mut [f32], weight: &[f32]) {
     // calculate sum of squares
-    let mut ss = 0.0;
-    for j in 0..x.len() {
-        ss += x[j] * x[j];
-    }
+    let mut ss = x.iter()
+        .map(|&xi| xi * xi)
+        .sum::<f32>();
     ss /= x.len() as f32;
     ss += 1e-5;
     ss = 1.0 / ss.sqrt();
     // normalize and scale
-    for j in 0..x.len() {
-        x[j] = weight[j] * (ss * x[j]);
-    }
+    x.iter_mut()
+        .zip(weight.iter())
+        .for_each(|(xi, &wi)| *xi = wi * (ss * *xi));
 }
 
 
