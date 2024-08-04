@@ -50,14 +50,25 @@ pub fn rmsnorm_inplace(x: &mut [f32], weight: &[f32]) {
     }
 }
 
+
+/// Params:
+/// * `xout`: pointer to array(d); can be part of a larger one
+/// * `x`: array(n)
+/// * `w`: array(d)(n)
+/// * `n`: number of elements in x
+/// * `d`: number of elements in xout
+///
+/// TODO: consider removing n,d as they are already known from the sizes of xout and w
+///
 /// W (d,n) @ x (n,) -> xout (d,)
 pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], _n: usize, d: usize) {
     // log::debug!("matmul(xout.len={}, x.len={}, w.len={}, n={}, d={})", xout.len(), x.len(), w.len(), n, d);
     // by far the most amount of time is spent inside this little function
     // #pragma omp parallel for private(i)
+    // println!("matmul: xout.len={}, x.len={}, w.len={}, n={_n}, d={d}", xout.len(), x.len(), w.len());
     let mut wp = w.iter();
-    for i in 0..d {
-        xout[i] = x.iter()
+    for xouti in xout[0..d].iter_mut() {
+        *xouti = x.iter()
             .zip(wp.by_ref())
             .map(|(&xj, &wj)| xj * wj)
             .sum();
