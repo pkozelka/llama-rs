@@ -55,11 +55,14 @@ pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, d: usize) {
     // log::debug!("matmul(xout.len={}, x.len={}, w.len={}, n={}, d={})", xout.len(), x.len(), w.len(), n, d);
     // by far the most amount of time is spent inside this little function
     // #pragma omp parallel for private(i)
+    let mut pos = 0;
     for i in 0..d {
         let mut val = 0.0;
-        for j in 0..n {
-            val += w[i * n + j] * x[j];
+        let mut wp = w[pos..pos + n].iter();
+        for &xj in x {
+            val += wp.next().unwrap() * xj;
         }
         xout[i] = val;
+        pos += n;
     }
 }
