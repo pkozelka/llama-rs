@@ -19,7 +19,6 @@ pub fn softmax(array: &mut [f32]) {
 
 
 pub fn rmsnorm(o: &mut [f32], x: &[f32], weight: &[f32]) {
-    // log::debug!("rmsnorm(o.len={}, x.len={}, weight.len={})", o.len(), x.len(), weight.len());
     // calculate sum of squares
     let mut ss = x.iter()
         .map(|&xi| xi * xi)
@@ -55,10 +54,8 @@ pub fn rmsnorm_inplace(x: &mut [f32], weight: &[f32]) {
 ///
 /// W (d,n) @ x (n,) -> xout (d,)
 pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32]) {
-    // log::debug!("matmul(xout.len={}, x.len={}, w.len={}, n={}, d={})", xout.len(), x.len(), w.len(), n, d);
     // by far the most amount of time is spent inside this little function
     // #pragma omp parallel for private(i)
-    // println!("matmul: xout.len={}, x.len={}, w.len={}, n={_n}, d={d}", xout.len(), x.len(), w.len());
     let mut wp = w.iter();
     for xouti in xout {
         *xouti = x.iter()
