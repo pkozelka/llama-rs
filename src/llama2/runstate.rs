@@ -1,7 +1,7 @@
 use llama_rs::config::Config;
 use llama_rs::dirty_dbg;
+use llama_rs::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
 
-use crate::llama2::math::{matmul, rmsnorm, rmsnorm_inplace, softmax};
 use crate::llama2::Transformer;
 
 /// current wave of activations

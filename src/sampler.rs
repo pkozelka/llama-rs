@@ -4,9 +4,8 @@
 
 use std::cell::RefCell;
 
-use llama_rs::dirty_dbg;
-
-use crate::llama2::math::softmax;
+use crate::dirty_dbg;
+use crate::math::softmax;
 
 #[derive(Debug)]
 pub struct ProbIndex {
@@ -28,7 +27,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub(crate) fn build_sampler(vocab_size: usize, temperature: f32, topp: f32, rng_seed: u64) -> anyhow::Result<Self> {
+    pub fn build_sampler(vocab_size: usize, temperature: f32, topp: f32, rng_seed: u64) -> anyhow::Result<Self> {
         // buffer only used with nucleus sampling; may not need but it's ~small
         let probindex = Vec::with_capacity(vocab_size);
         //

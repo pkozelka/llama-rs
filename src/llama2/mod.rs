@@ -4,14 +4,12 @@ use std::path::Path;
 
 use llama_rs::config::Config;
 use llama_rs::dirty_dbg;
-use weights::TransformerWeights;
-use crate::llama2::runstate::RunState;
-use crate::llama2::sampler::Sampler;
+use llama_rs::sampler::Sampler;
 use llama_rs::tokenizer::Tokenizer;
 use llama_rs::utilities;
+use weights::TransformerWeights;
 
-mod math;
-pub mod sampler;
+use crate::llama2::runstate::RunState;
 
 mod weights;
 
