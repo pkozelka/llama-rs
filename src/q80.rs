@@ -5,7 +5,7 @@ use std::io::Read;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 #[derive(Default, Clone)]
-struct QuantizedTensor {
+pub struct QuantizedTensor {
     /// quantized values
     q: Vec<i8>,
     /// scaling factors
@@ -17,7 +17,7 @@ static GS: usize = 64;
 impl QuantizedTensor {
     /// initialize `n` x quantized tensor (with `size_each` elements), starting from memory pointed at *ptr
     /// (note: in C this was about pointing to mmapped memory, but here we use a Read trait)
-    fn init_quantized_tensors<R: Read>(mut p: R, n: usize, size_each: usize) -> anyhow::Result<Vec<QuantizedTensor>> {
+    pub fn init_quantized_tensors<R: Read>(p: &mut R, n: usize, size_each: usize) -> anyhow::Result<Vec<QuantizedTensor>> {
         let mut res = vec![QuantizedTensor::default(); n];
         for _ in 0..n {
             let mut q = Vec::with_capacity(size_each);
@@ -31,13 +31,15 @@ impl QuantizedTensor {
         Ok(res)
     }
 
-    fn dequantize(&self, x: &mut [f32]) {
-        for i in 0..x.len() {
-            x[i] = self.q[i] as f32 * self.s[i / GS];
+    pub fn dequantize(&self) -> Vec<f32> {
+        let mut x = Vec::with_capacity(self.q.len());
+        for i in 0..x.capacity() {
+            x.push(self.q[i] as f32 * self.s[i / GS]);
         }
+        x
     }
 
-    fn quantize(&mut self, x: &[f32]) {
+    pub fn quantize(&mut self, x: &[f32]) {
         let num_groups = x.len() / GS;
         let q_max = 127.0;
 

@@ -12,6 +12,7 @@ use crate::llama2::tokenizer::Tokenizer;
 use crate::llama2::Transformer;
 
 mod llama2;
+mod llama2_q;
 
 fn main() -> anyhow::Result<()> {
     env_logger::builder()

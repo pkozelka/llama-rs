@@ -28,7 +28,7 @@ pub fn time_in_ms() -> i64 {
     since_the_epoch.as_millis() as i64
 }
 
-pub(crate) fn read_f32_table(reader: &mut BufReader<File>, layers: usize, size: usize) -> anyhow::Result<Vec<f32>> {
+pub fn read_f32_table(reader: &mut BufReader<File>, layers: usize, size: usize) -> anyhow::Result<Vec<f32>> {
     // log::debug!("read_f32_table(layers={}, size={})", layers, size);
     let mut table = vec![0.0; layers * size];
     reader.read_f32_into::<LittleEndian>(&mut table)?;

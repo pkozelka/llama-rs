@@ -1,7 +1,7 @@
 use llama_rs::config::Config;
 use std::io::BufReader;
 use std::fs::File;
-use crate::llama2::utilities;
+use llama_rs::utilities;
 
 #[derive(Default)]
 pub struct TransformerWeights {
