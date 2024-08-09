@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::io::BufReader;
+
 use llama_rs::config::Config;
-use llama_rs::q80::QuantizedTensor;
 use llama_rs::utilities;
+
+use crate::llama2_q::q80::QuantizedTensor;
 
 #[derive(Default)]
 pub struct TransformerWeights {
