@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use llama_rs::dirty_dbg;
+use crate::dirty_dbg;
 
 pub struct Tokenizer {
     /// the vocabulary of the tokenizer

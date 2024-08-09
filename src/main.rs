@@ -8,7 +8,7 @@ use std::str::FromStr;
 use clap::Parser;
 
 use crate::llama2::sampler::Sampler;
-use crate::llama2::tokenizer::Tokenizer;
+use llama_rs::tokenizer::Tokenizer;
 use crate::llama2::Transformer;
 
 mod llama2;

@@ -7,11 +7,10 @@ use llama_rs::dirty_dbg;
 use weights::TransformerWeights;
 use crate::llama2::runstate::RunState;
 use crate::llama2::sampler::Sampler;
-use crate::llama2::tokenizer::Tokenizer;
+use llama_rs::tokenizer::Tokenizer;
 use llama_rs::utilities;
 
 mod math;
-pub mod tokenizer;
 pub mod sampler;
 
 mod weights;
