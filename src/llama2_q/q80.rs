@@ -15,6 +15,13 @@ pub struct QuantizedTensor {
 static GS: usize = 64;
 
 impl QuantizedTensor {
+    pub(crate) fn new(sz: usize) -> QuantizedTensor {
+        Self {
+            q: vec![0;sz],
+            s: vec![0.0;sz],
+        }
+    }
+
     /// initialize `n` x quantized tensor (with `size_each` elements), starting from memory pointed at *ptr
     /// (note: in C this was about pointing to mmapped memory, but here we use a Read trait)
     pub fn init_quantized_tensors<R: Read>(p: &mut R, n: usize, size_each: usize) -> anyhow::Result<Vec<QuantizedTensor>> {
