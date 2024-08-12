@@ -52,7 +52,7 @@ impl TransformerWeights {
     }
 
     /// currently we have this instead of memory_map_weights()
-    pub(crate) fn read_weights(reader: &mut BufReader<File>, p: &Config) -> anyhow::Result<TransformerWeights> {
+    pub(crate) fn read_weights(reader: &mut BufReader<File>, p: &Config) -> anyhow::Result<Self> {
         let head_size = p.dim / p.n_heads;
         let hidden_dim = p.hidden_dim;
         let n_layers = p.n_layers;
@@ -82,7 +82,7 @@ impl TransformerWeights {
             utilities::read_f32_table(reader, p.vocab_size, p.dim)?
         };
 
-        Ok(TransformerWeights {
+        Ok(Self {
             token_embedding_table,
             rms_att_weight,
             wq,

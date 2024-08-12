@@ -19,7 +19,11 @@ pub struct Config {
     /// max sequence length
     pub seq_len: usize,
     /// `true` indicates that we can reuse `model.tok_embeddings.weight` for `model.output.weight`
+    /// legacy format only - derived from negative vocab_size
     pub shared_weights: bool,
+    /// a byte to indicate if the classifier is shared
+    /// non legacy format only
+    pub shared_classifier: bool,
     /// group size used for quantization
     pub group_size: Option::<usize>,
 }
@@ -69,15 +73,18 @@ impl Config {
         let seq_len = reader.read_u32::<LittleEndian>()?;
 
         let shared_weights;
+        let shared_classifier;
         let vocab_size;
         let group_size;
         if version == 0 {
             // negative vocab size is hacky way of signaling unshared weights. bit yikes.
             shared_weights = vocab_size_i32 > 0;
+            shared_classifier = false;
             vocab_size = vocab_size_i32.abs() as usize;
             group_size = None;
         } else {
-            shared_weights = reader.read_i8()? > 0;
+            shared_weights = false;
+            shared_classifier = reader.read_i8()? > 0;
             vocab_size = vocab_size_i32 as usize;
             group_size = if version == 1 {
                 None
@@ -97,6 +104,7 @@ impl Config {
             vocab_size,
             seq_len: seq_len as usize,
             shared_weights,
+            shared_classifier,
             group_size,
         })
     }

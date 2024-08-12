@@ -73,11 +73,17 @@ impl QuantizedTensor {
         }
     }
 
-    fn matmul(&self, xout: &mut [f32], w: &QuantizedTensor, n: usize, d: usize) {
+    /// Params:
+    /// * `xout`: pointer to array(d); can be part of a larger one
+    /// * `x`: array(n)
+    /// * `w`: array(d)(n)
+    pub(crate) fn matmul(xout: &mut [f32], x: &QuantizedTensor, w: &QuantizedTensor) {
         // W (d,n) @ x (n,) -> xout (d,)
         // by far the most amount of time is spent inside this little function
         // inputs to this function are both quantized
 
+        let d = xout.len();
+        let n = x.q.len();
         for i in 0..d {
             let mut val = 0.0;
             let mut ival = 0;
@@ -86,9 +92,9 @@ impl QuantizedTensor {
             // do the matmul in groups of GS
             for j in (0..=n - GS).step_by(GS) {
                 for k in 0..GS {
-                    ival += self.q[j + k] as i32 * w.q[ixn + j + k] as i32;
+                    ival += x.q[j + k] as i32 * w.q[ixn + j + k] as i32;
                 }
-                val += ival as f32 * w.s[(ixn + j) / GS] * self.s[j / GS];
+                val += ival as f32 * w.s[(ixn + j) / GS] * x.s[j / GS];
                 ival = 0;
             }
 

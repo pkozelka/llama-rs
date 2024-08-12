@@ -7,7 +7,7 @@ use llama_rs::utilities;
 use crate::llama2_q::q80::QuantizedTensor;
 
 #[derive(Default)]
-pub struct TransformerWeights {
+pub struct QTransformerWeights {
     // token embedding table
     /// (vocab_size, dim)
     pub(crate) q_tokens: QuantizedTensor,
@@ -43,9 +43,9 @@ pub struct TransformerWeights {
     pub(crate) wcls: QuantizedTensor,
 }
 
-impl TransformerWeights {
+impl QTransformerWeights {
     /// currently we have this instead of memory_map_weights()
-    pub(crate) fn read_weights(reader: &mut BufReader<File>, p: &Config, shared_classifier: bool) -> anyhow::Result<TransformerWeights> {
+    pub(crate) fn read_weights(reader: &mut BufReader<File>, p: &Config) -> anyhow::Result<Self> {
         let head_size = p.dim / p.n_heads;
         let hidden_dim = p.hidden_dim;
         let n_layers = p.n_layers;
@@ -72,7 +72,7 @@ impl TransformerWeights {
         let w3 = QuantizedTensor::init_quantized_tensors(reader, n_layers, p.dim * hidden_dim)?;
 
 
-        let wcls = if shared_classifier {
+        let wcls = if p.shared_classifier {
             q_tokens.clone()
         } else {
             QuantizedTensor::init_quantized_tensors(reader, 1, p.vocab_size * p.dim)?
@@ -81,7 +81,7 @@ impl TransformerWeights {
                 .unwrap()
         };
 
-        Ok(TransformerWeights {
+        Ok(Self {
             q_tokens,
             token_embedding_table,
             rms_att_weight,

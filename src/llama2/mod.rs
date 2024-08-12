@@ -2,11 +2,10 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+use llama_rs::{dirty_dbg, utilities};
 use llama_rs::config::Config;
-use llama_rs::dirty_dbg;
 use llama_rs::sampler::Sampler;
 use llama_rs::tokenizer::Tokenizer;
-use llama_rs::utilities;
 use weights::TransformerWeights;
 
 use crate::llama2::runstate::RunState;
